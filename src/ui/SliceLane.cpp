@@ -166,11 +166,14 @@ void SliceLane::resized()
 {
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
-    auto nameRow = header.removeFromTop (18);
-    reverseButton.setBounds (nameRow.removeFromRight (44));
+    // All seven buttons share one size and one vertical rhythm.
+    const int buttonWidth = header.getWidth() / 3;
 
+    auto nameRow = header.removeFromTop (22);
+    reverseButton.setBounds (nameRow.removeFromRight (buttonWidth).reduced (0, 1));
+
+    header.removeFromTop (6);
     auto modeRow = header.removeFromTop (22).reduced (0, 1);
-    const int buttonWidth = modeRow.getWidth() / 3;
     loopButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     gateButton.setBounds (modeRow);
@@ -210,7 +213,7 @@ void SliceLane::paint (juce::Graphics& g)
     g.setColour (active || padPressed ? kWave : juce::Colours::whitesmoke.withAlpha (0.85f));
     g.setFont (juce::Font (juce::FontOptions { ui::kFontTitle, juce::Font::bold }));
     g.drawText (juce::MidiMessage::getMidiNoteName (sec->midiNote, true, true, 3),
-                juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 18),
+                juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 22),
                 juce::Justification::centredLeft);
 
     // Connector tree: a stem from the loop mode segment splits into all three
