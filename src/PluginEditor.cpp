@@ -301,7 +301,7 @@ void ChopsEditor::paint (juce::Graphics& g)
                         + "   " + juce::String (smp.sourceSampleRate / 1000.0, 1) + " kHz"
                         + "   " + juce::String (doc->sections.size()) + " slice(s)"
                         + "   wave: click adds slice, drag handles, wheel zooms · lane: drag"
-                        + " selects loop, loop edges adjust, double-click clears",
+                        + " selects loop, inside moves it, edges adjust, double-click clears",
                     info, juce::Justification::centredLeft);
     }
     else

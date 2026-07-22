@@ -50,7 +50,7 @@ public:
     void mouseMove (const juce::MouseEvent&) override;
 
 private:
-    enum class Drag { None, SelectLoop, LoopStart, LoopEnd };
+    enum class Drag { None, SelectLoop, LoopStart, LoopEnd, MoveLoop };
 
     const Section* section() const;
     juce::Rectangle<int> waveBounds() const;
@@ -66,6 +66,8 @@ private:
     double viewStart = 0.0, viewLength = 0.0;
     Drag drag = Drag::None;
     juce::int64 selectAnchor = 0;
+    juce::int64 loopGrabOffset = 0;   // MoveLoop: grab frame relative to loopStart
+    juce::int64 loopGrabLength = 0;
     bool active = false;
     double playFrame = -1.0;
     bool padPressed = false;

@@ -98,7 +98,9 @@ republishing.
   edited) and ONE `SliceLane` bound to the selected slice — first by default,
   then last-triggered (pads and MIDI select; never switches during an active
   gesture). The lane shows exactly the section range, no context padding, and
-  owns only the loop region and per-slice settings. Waveform painting goes through
+  owns only the loop region and per-slice settings (drag selects a loop,
+  dragging inside it slides the whole loop length-preserved, edges adjust,
+  double-click clears — all live on the sounding voice). Waveform painting goes through
   `PeakCache` (mip-mapped min/max) + shared `render::drawWave`, which flips to
   a sample-level path when zoomed past ~2 frames/pixel.
 - **Tests** (`tests/EngineTests.cpp`): bit-exact philosophy — identity-ramp

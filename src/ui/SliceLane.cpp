@@ -236,6 +236,10 @@ SliceLane::Drag SliceLane::hitAt (juce::Point<int> pos) const
     {
         if (near (sec->loopStart)) return Drag::LoopStart;
         if (near (sec->loopEnd)) return Drag::LoopEnd;
+
+        const auto frame = xToFrame ((double) pos.x);
+        if (frame > sec->loopStart && frame < sec->loopEnd)
+            return Drag::MoveLoop;   // grab the loop body, slide it whole
     }
     return Drag::SelectLoop;
 }
@@ -259,6 +263,12 @@ void SliceLane::mouseDown (const juce::MouseEvent& e)
 
     drag = hitAt (e.getPosition());
     selectAnchor = xToFrame ((double) e.getPosition().x);
+
+    if (drag == Drag::MoveLoop)
+    {
+        loopGrabOffset = selectAnchor - sec->loopStart;
+        loopGrabLength = sec->loopEnd - sec->loopStart;
+    }
 }
 
 void SliceLane::mouseDrag (const juce::MouseEvent& e)
@@ -284,6 +294,18 @@ void SliceLane::mouseDrag (const juce::MouseEvent& e)
         case Drag::LoopEnd:
             if (onSetLoop)
                 onSetLoop (index, sec->loopStart, frame);
+            break;
+
+        case Drag::MoveLoop:
+            if (onSetLoop && loopGrabLength > 0)
+            {
+                // Slide the whole loop, length preserved, stopping at the
+                // slice walls (setSectionLoop's independent clamping would
+                // otherwise compress it against them).
+                const auto newStart = std::clamp (frame - loopGrabOffset,
+                                                  sec->start, sec->end - loopGrabLength);
+                onSetLoop (index, newStart, newStart + loopGrabLength);
+            }
             break;
 
         case Drag::None:
@@ -324,6 +346,9 @@ void SliceLane::mouseMove (const juce::MouseEvent& e)
         case Drag::LoopStart:
         case Drag::LoopEnd:
             setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+            break;
+        case Drag::MoveLoop:
+            setMouseCursor (juce::MouseCursor::DraggingHandCursor);
             break;
         case Drag::SelectLoop:
         case Drag::None:
