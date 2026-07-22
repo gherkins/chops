@@ -187,11 +187,19 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
 
     renderSpan (buffer, pos, total - pos);
 
-    // Publish the most recently started active voice for the UI playhead.
+    // Publish every voice for the UI: all playing sections/playheads, plus
+    // the newest voice for the last-triggered lane selection.
     const Voice* newest = nullptr;
-    for (const auto& v : voices)
+    for (size_t i = 0; i < voices.size(); ++i)
+    {
+        const auto& v = voices[i];
+        uiVoices[i].section.store (v.isActive() ? v.sectionIndex() : -1,
+                                   std::memory_order_relaxed);
+        uiVoices[i].frame.store (v.isActive() ? v.position() : -1.0,
+                                 std::memory_order_relaxed);
         if (v.isActive() && (newest == nullptr || v.serial() > newest->serial()))
             newest = &v;
+    }
 
     uiSectionIndex.store (newest != nullptr ? newest->sectionIndex() : -1,
                           std::memory_order_relaxed);

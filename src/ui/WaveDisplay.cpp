@@ -28,13 +28,12 @@ void WaveDisplay::setDocument (std::shared_ptr<const Document> newDoc, const Pea
     repaint();
 }
 
-void WaveDisplay::setPlayhead (int sectionIndex, double frame)
+void WaveDisplay::setPlayheads (const std::vector<std::pair<int, double>>& voices)
 {
-    if (sectionIndex == playSection && juce::approximatelyEqual (frame, playFrame))
+    if (voices == playheads)
         return;
 
-    playSection = sectionIndex;
-    playFrame = frame;
+    playheads = voices;
     repaint();
 }
 
@@ -109,18 +108,20 @@ void WaveDisplay::paint (juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     const int width = getWidth();
 
-    // Playing section highlight: the main display always shows where the
-    // currently played slice lives.
-    if (playSection >= 0 && playSection < (int) doc->sections.size())
+    // Playing section highlights: every currently sounding slice, so
+    // polyphonic playback is fully visible.
+    g.setColour (kWave.withAlpha (0.14f));
+    for (const auto& [section, frame] : playheads)
     {
-        const auto& sec = doc->sections[(size_t) playSection];
+        juce::ignoreUnused (frame);
+        if (section < 0 || section >= (int) doc->sections.size())
+            continue;
+
+        const auto& sec = doc->sections[(size_t) section];
         const auto x1 = (float) std::max (0.0, frameToX ((double) sec.start));
         const auto x2 = (float) std::min ((double) width, frameToX ((double) sec.end));
         if (x2 > x1)
-        {
-            g.setColour (kWave.withAlpha (0.14f));
             g.fillRect (x1, 0.0f, x2 - x1, bounds.getHeight());
-        }
     }
 
     render::drawWave (g, bounds, buffer, *peaks, viewStart, viewLength, kWave);
@@ -140,14 +141,16 @@ void WaveDisplay::paint (juce::Graphics& g)
         g.fillPath (handle);
     }
 
-    if (playFrame >= 0.0)
+    g.setColour (kPlayhead.withAlpha (0.85f));
+    for (const auto& [section, frame] : playheads)
     {
-        const auto x = (float) frameToX (playFrame);
+        juce::ignoreUnused (section);
+        if (frame < 0.0)
+            continue;
+
+        const auto x = (float) frameToX (frame);
         if (x >= 0.0f && x <= (float) width)
-        {
-            g.setColour (kPlayhead.withAlpha (0.85f));
             g.fillRect (x, 0.0f, 1.5f, bounds.getHeight());
-        }
     }
 }
 

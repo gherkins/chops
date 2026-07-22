@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <algorithm>
+#include <vector>
 
 #include "../model/Document.h"
 
@@ -22,11 +24,12 @@ public:
         repaint();
     }
 
-    void setActiveSection (int sectionIndex)
+    // Every currently playing section — polyphony lights multiple pads.
+    void setActiveSections (std::vector<int> sectionIndices)
     {
-        if (activeSection != sectionIndex)
+        if (activeSections != sectionIndices)
         {
-            activeSection = sectionIndex;
+            activeSections = std::move (sectionIndices);
             repaint();
         }
     }
@@ -55,7 +58,9 @@ public:
                                                bounds.getY(), padWidth, bounds.getHeight())
                            .reduced (2.0f);
 
-            const bool lit = i == activeSection || i == pressedIndex;
+            const bool lit = i == pressedIndex
+                             || std::find (activeSections.begin(), activeSections.end(), i)
+                                    != activeSections.end();
             g.setColour (lit ? juce::Colour (0xff5ec8a8) : juce::Colour (0xff2b2e36));
             g.fillRoundedRectangle (pad, 4.0f);
 
@@ -100,7 +105,7 @@ private:
     }
 
     std::shared_ptr<const Document> doc;
-    int activeSection = -1;
+    std::vector<int> activeSections;
     int selectedSection = -1;
     int pressedIndex = -1;
 };

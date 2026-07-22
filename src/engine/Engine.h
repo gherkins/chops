@@ -29,8 +29,18 @@ public:
     void process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept;
 
     // UI feedback (read from message thread, torn values are harmless).
+    // Newest active voice — drives the last-triggered lane selection.
     std::atomic<int> uiSectionIndex { -1 };
     std::atomic<double> uiPositionFrames { -1.0 };
+
+    // Per-voice snapshots so polyphony is visible: every playing section and
+    // playhead, not just the newest one.
+    struct VoiceSnapshot
+    {
+        std::atomic<int> section { -1 };     // -1 == slot idle
+        std::atomic<double> frame { -1.0 };
+    };
+    std::array<VoiceSnapshot, kMaxVoices> uiVoices;
 
 private:
     void handleMidi (const Document* doc, const juce::uint8* data, int numBytes) noexcept;

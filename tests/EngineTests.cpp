@@ -567,6 +567,34 @@ int main (int argc, char* argv[])
         EXPECT (! d.sections[0].hasLoop());
     }
 
+    // --- polyphony UI snapshots: every playing voice is published ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+
+        chops::Engine polyEngine;
+        polyEngine.prepare (kRate, 512);
+        polyEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (2, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        addNoteOn (midi, 37, 100);
+        polyEngine.process (block, midi);
+
+        std::vector<int> playing;
+        for (const auto& slot : polyEngine.uiVoices)
+            if (const auto section = slot.section.load(); section >= 0)
+                playing.push_back (section);
+
+        std::sort (playing.begin(), playing.end());
+        EXPECT (playing == (std::vector<int> { 0, 1 }));
+        EXPECT (polyEngine.uiSectionIndex.load() == 1);   // newest voice
+    }
+
     // --- gap healing: states saved before boundaries became main-wave-only
     // can hold sections with gaps (e.g. a shortened slice); every partition
     // edit must heal them instead of getting stuck ---

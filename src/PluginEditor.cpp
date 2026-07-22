@@ -212,16 +212,35 @@ void ChopsEditor::changeListenerCallback (juce::ChangeBroadcaster*)
 
 void ChopsEditor::timerCallback()
 {
-    const auto section = chopsProcessor.engine().uiSectionIndex.load (std::memory_order_relaxed);
-    const auto frame = chopsProcessor.engine().uiPositionFrames.load (std::memory_order_relaxed);
-    waveDisplay.setPlayhead (section, frame);
-    padStrip.setActiveSection (section);
+    auto& engine = chopsProcessor.engine();
+
+    // Every playing voice: the main wave and the pads show full polyphony.
+    std::vector<std::pair<int, double>> playing;
+    std::vector<int> playingSections;
+    for (const auto& slot : engine.uiVoices)
+    {
+        const auto section = slot.section.load (std::memory_order_relaxed);
+        if (section >= 0)
+        {
+            playing.emplace_back (section, slot.frame.load (std::memory_order_relaxed));
+            playingSections.push_back (section);
+        }
+    }
+    waveDisplay.setPlayheads (playing);
+    padStrip.setActiveSections (std::move (playingSections));
 
     // Last-triggered slice becomes the edited one (also covers MIDI input).
-    if (section >= 0)
-        selectSection (section);
+    const auto newest = engine.uiSectionIndex.load (std::memory_order_relaxed);
+    if (newest >= 0)
+        selectSection (newest);
 
-    sliceLane.setPlayhead (section == sliceLane.boundIndex(), frame);
+    // The lane shows its own section's playhead whenever that slice sounds,
+    // even if it is not the newest voice.
+    double laneFrame = -1.0;
+    for (const auto& [section, frame] : playing)
+        if (section == sliceLane.boundIndex())
+            laneFrame = frame;
+    sliceLane.setPlayhead (laneFrame >= 0.0, laneFrame);
 }
 
 void ChopsEditor::resized()

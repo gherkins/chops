@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <utility>
+#include <vector>
 
 #include "../model/Document.h"
 #include "PeakCache.h"
@@ -23,7 +25,10 @@ public:
     std::function<void (int index)> onRemove;
 
     void setDocument (std::shared_ptr<const Document> newDoc, const PeakCache* newPeaks);
-    void setPlayhead (int sectionIndex, double frame);
+
+    // All currently playing voices as (section index, frame) pairs — the main
+    // display shows every playing slice, not just the newest.
+    void setPlayheads (const std::vector<std::pair<int, double>>& voices);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -48,8 +53,7 @@ private:
     double viewLength = 0.0;
     int dragIndex = -1;
     bool didDrag = false;
-    int playSection = -1;
-    double playFrame = -1.0;
+    std::vector<std::pair<int, double>> playheads;
 
     static constexpr int kHandleHitPx = 6;
     static constexpr double kMinViewFrames = 32.0;
