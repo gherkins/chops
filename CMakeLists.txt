@@ -30,7 +30,9 @@ target_sources(chops PRIVATE
     src/PluginEditor.cpp
     src/engine/Engine.cpp
     src/engine/Voice.cpp
-    src/state/State.cpp)
+    src/model/Edits.cpp
+    src/state/State.cpp
+    src/ui/WaveDisplay.cpp)
 
 target_compile_definitions(chops PUBLIC
     JUCE_WEB_BROWSER=0
@@ -57,6 +59,7 @@ target_sources(chops_tests PRIVATE
     tests/EngineTests.cpp
     src/engine/Engine.cpp
     src/engine/Voice.cpp
+    src/model/Edits.cpp
     src/state/State.cpp)
 
 target_compile_definitions(chops_tests PRIVATE

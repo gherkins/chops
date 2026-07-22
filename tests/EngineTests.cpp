@@ -5,6 +5,7 @@
 
 #include "../src/engine/Engine.h"
 #include "../src/model/Document.h"
+#include "../src/model/Edits.h"
 #include "../src/state/State.h"
 
 #include <cstdio>
@@ -186,6 +187,71 @@ int main()
         for (int i = 0; i < 512; ++i)
             peak = std::max (peak, std::abs (out.getSample (0, i)));
         EXPECT (peak <= kLeftValue * 2.0f + 1.0e-6f);
+    }
+
+    // --- slicing edits: split / linked move / remove / auto-slice ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (d.sections.size() == 1);
+
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (d.sections.size() == 2);
+        EXPECT (d.sections[0].end == 20000 && d.sections[1].start == 20000);
+        EXPECT (d.sections[0].midiNote == 36 && d.sections[1].midiNote == 37);
+
+        // Too close to an existing boundary: rejected.
+        EXPECT (! chops::edits::splitAt (d, 20000 + 10));
+
+        // Linked partition move: previous end follows the dragged start.
+        EXPECT (chops::edits::moveSectionStart (d, 1, 25000));
+        EXPECT (d.sections[0].end == 25000 && d.sections[1].start == 25000);
+
+        // Clamped move: cannot cross its own end or the previous start.
+        EXPECT (chops::edits::moveSectionStart (d, 1, 999999));
+        EXPECT (d.sections[1].start == kFrames - chops::edits::kMinSectionFrames);
+        EXPECT (chops::edits::moveSectionStart (d, 1, 25000));
+
+        // Remove merges back into the previous section.
+        EXPECT (chops::edits::removeSection (d, 1));
+        EXPECT (d.sections.size() == 1);
+        EXPECT (d.sections[0].start == 0 && d.sections[0].end == kFrames);
+        EXPECT (! chops::edits::removeSection (d, 0));   // never below one section
+
+        chops::edits::autoSliceEqual (d, 8);
+        EXPECT (d.sections.size() == 8);
+        EXPECT (d.sections[7].end == kFrames);
+        for (int i = 0; i < 8; ++i)
+        {
+            EXPECT (d.sections[(size_t) i].midiNote == 36 + i);
+            if (i > 0)
+                EXPECT (d.sections[(size_t) i].start == d.sections[(size_t) i - 1].end);
+        }
+
+        chops::edits::clearSlices (d);
+        EXPECT (d.sections.size() == 1);
+    }
+
+    // --- transient auto-slice on an impulse train ---
+    {
+        auto impulse = std::make_shared<chops::SampleData>();
+        impulse->buffer.setSize (1, kFrames);
+        impulse->buffer.clear();
+        // Decaying bursts at 0, 11025, 22050, 33075.
+        for (int hit = 0; hit < 4; ++hit)
+            for (int i = 0; i < 1000; ++i)
+                impulse->buffer.setSample (0, hit * 11025 + i,
+                                           (i % 7 < 4 ? 0.8f : -0.8f) * (1.0f - (float) i / 1000.0f));
+        impulse->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = impulse;
+        chops::edits::autoSliceTransients (d, 0.5f);
+
+        EXPECT (d.sections.size() == 4);
+        for (int hit = 1; hit < std::min (4, (int) d.sections.size()); ++hit)
+            EXPECT (std::abs (d.sections[(size_t) hit].start - (juce::int64) hit * 11025) <= 512);
     }
 
     wavFile.deleteFile();

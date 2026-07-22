@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 
+#include "model/Edits.h"
+
 static bool isAudioFile (const juce::String& path)
 {
     static const juce::StringArray extensions
@@ -19,8 +21,49 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     setResizable (true, true);
     setResizeLimits (600, 400, 4096, 4096);
 
-    doc = chopsProcessor.document();
-    rebuildPeaks();
+    addAndMakeVisible (waveDisplay);
+    addAndMakeVisible (padStrip);
+    addAndMakeVisible (sliceEqualButton);
+    addAndMakeVisible (sliceCountBox);
+    addAndMakeVisible (transientButton);
+    addAndMakeVisible (clearButton);
+
+    for (const int count : { 2, 4, 8, 16, 32 })
+        sliceCountBox.addItem (juce::String (count), count);
+    sliceCountBox.setSelectedId (8, juce::dontSendNotification);
+
+    waveDisplay.onSplit = [this] (juce::int64 frame)
+    {
+        applyEdit ([frame] (chops::Document& d) { return chops::edits::splitAt (d, frame); });
+    };
+    waveDisplay.onMoveStart = [this] (int index, juce::int64 newStart)
+    {
+        applyEdit ([index, newStart] (chops::Document& d)
+                   { return chops::edits::moveSectionStart (d, index, newStart); });
+    };
+    waveDisplay.onRemove = [this] (int index)
+    {
+        applyEdit ([index] (chops::Document& d) { return chops::edits::removeSection (d, index); });
+    };
+    padStrip.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
+
+    sliceEqualButton.onClick = [this]
+    {
+        const int parts = sliceCountBox.getSelectedId();
+        applyEdit ([parts] (chops::Document& d)
+                   { chops::edits::autoSliceEqual (d, parts); return true; });
+    };
+    transientButton.onClick = [this]
+    {
+        applyEdit ([] (chops::Document& d)
+                   { chops::edits::autoSliceTransients (d, 0.5f); return true; });
+    };
+    clearButton.onClick = [this]
+    {
+        applyEdit ([] (chops::Document& d) { chops::edits::clearSlices (d); return true; });
+    };
+
+    refreshFromModel();
     chopsProcessor.addChangeListener (this);
     startTimerHz (30);
 }
@@ -30,127 +73,94 @@ ChopsEditor::~ChopsEditor()
     chopsProcessor.removeChangeListener (this);
 }
 
-void ChopsEditor::changeListenerCallback (juce::ChangeBroadcaster*)
+void ChopsEditor::applyEdit (const std::function<bool (chops::Document&)>& edit)
 {
-    doc = chopsProcessor.document();
-    rebuildPeaks();
-    repaint();
-}
-
-juce::Rectangle<int> ChopsEditor::waveArea() const
-{
-    return getLocalBounds().reduced (16).withTrimmedBottom (getHeight() / 3);
-}
-
-void ChopsEditor::rebuildPeaks()
-{
-    peakMin.assign (kNumBins, 0.0f);
-    peakMax.assign (kNumBins, 0.0f);
-
     if (doc == nullptr || doc->sample == nullptr)
         return;
 
-    const auto& buffer = doc->sample->buffer;
-    const auto numFrames = (juce::int64) buffer.getNumSamples();
-    const int numChannels = buffer.getNumChannels();
+    chops::Document edited (*doc);
+    if (edit (edited))
+        chopsProcessor.setDocument (std::move (edited));
+}
 
-    for (int bin = 0; bin < kNumBins; ++bin)
+void ChopsEditor::refreshFromModel()
+{
+    doc = chopsProcessor.document();
+
+    if (doc->sample != peaksBuiltFor)
     {
-        const auto begin = numFrames * bin / kNumBins;
-        const auto end = std::max (begin + 1, numFrames * (bin + 1) / kNumBins);
-        float lo = 0.0f, hi = 0.0f;
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            const float* data = buffer.getReadPointer (ch);
-            for (auto i = begin; i < end; ++i)
-            {
-                lo = std::min (lo, data[i]);
-                hi = std::max (hi, data[i]);
-            }
-        }
-
-        peakMin[(size_t) bin] = lo;
-        peakMax[(size_t) bin] = hi;
+        peaksBuiltFor = doc->sample;
+        if (doc->sample != nullptr)
+            peaks.build (doc->sample->buffer);
+        else
+            peaks.clear();
     }
+
+    waveDisplay.setDocument (doc, &peaks);
+    padStrip.setDocument (doc);
+    repaint();
+}
+
+void ChopsEditor::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    refreshFromModel();
 }
 
 void ChopsEditor::timerCallback()
 {
-    const auto area = waveArea().toFloat();
-    float x = -1.0f;
+    const auto section = chopsProcessor.engine().uiSectionIndex.load (std::memory_order_relaxed);
+    const auto frame = chopsProcessor.engine().uiPositionFrames.load (std::memory_order_relaxed);
+    waveDisplay.setPlayhead (section, frame);
+    padStrip.setActiveSection (section);
+}
 
-    if (doc != nullptr && doc->sample != nullptr)
-    {
-        const auto pos = chopsProcessor.engine().uiPositionFrames.load (std::memory_order_relaxed);
-        const auto total = (double) doc->sample->numFrames();
-        if (pos >= 0.0 && total > 0.0)
-            x = area.getX() + (float) (pos / total) * area.getWidth();
-    }
+void ChopsEditor::resized()
+{
+    auto bounds = getLocalBounds().reduced (12);
 
-    if (! juce::approximatelyEqual (x, lastPlayheadX))
-    {
-        lastPlayheadX = x;
-        repaint (waveArea().expanded (2));
-    }
+    auto topBar = bounds.removeFromTop (30);
+    sliceCountBox.setBounds (topBar.removeFromLeft (64));
+    topBar.removeFromLeft (4);
+    sliceEqualButton.setBounds (topBar.removeFromLeft (72));
+    topBar.removeFromLeft (4);
+    transientButton.setBounds (topBar.removeFromLeft (92));
+    topBar.removeFromLeft (4);
+    clearButton.setBounds (topBar.removeFromLeft (64));
+
+    bounds.removeFromTop (8);
+    auto info = bounds.removeFromBottom (22);
+    juce::ignoreUnused (info);
+
+    padStrip.setBounds (bounds.removeFromBottom (84));
+    bounds.removeFromBottom (8);
+    waveDisplay.setBounds (bounds);
 }
 
 void ChopsEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff17181c));
 
-    const auto area = waveArea();
-    g.setColour (juce::Colour (0xff22242a));
-    g.fillRect (area);
+    const auto info = getLocalBounds().reduced (12).removeFromBottom (22);
+    g.setFont (13.0f);
 
     if (doc != nullptr && doc->sample != nullptr)
     {
-        const auto areaF = area.toFloat();
-        const float midY = areaF.getCentreY();
-        const float halfH = areaF.getHeight() * 0.48f;
-
-        g.setColour (juce::Colour (0xff5ec8a8));
-        const float binWidth = areaF.getWidth() / (float) kNumBins;
-
-        for (int bin = 0; bin < kNumBins; ++bin)
-        {
-            const float x = areaF.getX() + binWidth * (float) bin;
-            const float top = midY - peakMax[(size_t) bin] * halfH;
-            const float bottom = midY - peakMin[(size_t) bin] * halfH;
-            g.fillRect (x, top, std::max (binWidth, 1.0f), std::max (bottom - top, 1.0f));
-        }
-
-        if (lastPlayheadX >= areaF.getX())
-        {
-            g.setColour (juce::Colours::white.withAlpha (0.8f));
-            g.fillRect (lastPlayheadX, areaF.getY(), 1.5f, areaF.getHeight());
-        }
-
         const auto& smp = *doc->sample;
-        g.setColour (juce::Colours::whitesmoke);
-        g.setFont (14.0f);
+        g.setColour (juce::Colours::whitesmoke.withAlpha (0.7f));
         g.drawText (juce::File (smp.originalPath).getFileName()
                         + "   " + juce::String (smp.sourceSampleRate / 1000.0, 1) + " kHz"
-                        + "   " + juce::String (smp.numFrames()) + " frames"
-                        + "   pad: " + juce::MidiMessage::getMidiNoteName (
-                              doc->global.rootNote, true, true, 3)
-                        + "   (hold click to audition)",
-                    getLocalBounds().reduced (16).removeFromBottom (24),
-                    juce::Justification::centredLeft);
+                        + "   " + juce::String (doc->sections.size()) + " slice(s)"
+                        + "   click wave: add slice · drag handle: move · double-click handle: remove"
+                        + " · wheel: zoom",
+                    info, juce::Justification::centredLeft);
     }
     else
     {
-        g.setColour (juce::Colours::whitesmoke.withAlpha (dragOver ? 1.0f : 0.6f));
-        g.setFont (22.0f);
-        g.drawText ("drop an audio file", area, juce::Justification::centred);
-
         const auto error = chopsProcessor.lastError();
         if (error.isNotEmpty())
         {
             g.setColour (juce::Colours::orangered);
-            g.setFont (14.0f);
-            g.drawText (error, getLocalBounds().reduced (16).removeFromBottom (24),
-                        juce::Justification::centredLeft);
+            g.drawText (error, info, juce::Justification::centredLeft);
         }
     }
 
@@ -196,22 +206,4 @@ void ChopsEditor::filesDropped (const juce::StringArray& files, int, int)
     }
 
     repaint();
-}
-
-void ChopsEditor::mouseDown (const juce::MouseEvent& e)
-{
-    if (doc != nullptr && doc->sample != nullptr && waveArea().contains (e.getPosition()))
-    {
-        auditioning = true;
-        chopsProcessor.triggerPad (doc->global.rootNote, true);
-    }
-}
-
-void ChopsEditor::mouseUp (const juce::MouseEvent&)
-{
-    if (auditioning)
-    {
-        auditioning = false;
-        chopsProcessor.triggerPad (doc->global.rootNote, false);
-    }
 }

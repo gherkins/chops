@@ -37,6 +37,7 @@ public:
 
     // --- message-thread API for the editor ---
     bool loadSampleFile (const juce::File& file);
+    void setDocument (chops::Document&& doc)       { setModel (std::move (doc)); }
     std::shared_ptr<const chops::Document> document() const;
     juce::String lastError() const;
     void triggerPad (int midiNote, bool noteOn);   // UI click audition
