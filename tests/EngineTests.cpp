@@ -555,16 +555,19 @@ int main (int argc, char* argv[])
         EXPECT (! chops::edits::setSectionRange (d, 0, 100, 150));   // below minimum
         EXPECT (chops::edits::setSectionLoop (d, 0, 5000, 9000));
         EXPECT (d.sections[0].loopStart == 5000 && d.sections[0].loopEnd == 9000);
+        EXPECT (d.sections[0].mode == chops::PlayMode::LoopRun);     // loop implies LoopRun
         EXPECT (chops::edits::setSectionLoop (d, 0, 50, 9000));      // clamps into section
         EXPECT (d.sections[0].loopStart == 100);
         EXPECT (! chops::edits::setSectionLoop (d, 0, 5000, 5010));  // too short
         EXPECT (chops::edits::clearSectionLoop (d, 0));
         EXPECT (! d.sections[0].hasLoop());
+        EXPECT (d.sections[0].mode == chops::PlayMode::Gate);        // no loop -> Gate
 
-        // Shrinking the range drops a loop that no longer fits.
+        // Shrinking the range drops a loop that no longer fits — and the mode.
         EXPECT (chops::edits::setSectionLoop (d, 0, 25000, 29000));
         EXPECT (chops::edits::setSectionRange (d, 0, 100, 20000));
         EXPECT (! d.sections[0].hasLoop());
+        EXPECT (d.sections[0].mode == chops::PlayMode::Gate);
     }
 
     // --- polyphony UI snapshots: every playing voice is published ---

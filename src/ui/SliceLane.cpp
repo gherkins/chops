@@ -137,7 +137,8 @@ void SliceLane::resized()
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
     auto nameRow = header.removeFromTop (18);
-    reverseButton.setBounds (nameRow.removeFromRight (52));
+    const auto revArea = nameRow.removeFromRight (52);
+    reverseButton.setBounds (revArea.withSizeKeepingCentre (revArea.getWidth(), 15));
 
     auto modeRow = header.removeFromTop (22);
     const int buttonWidth = modeRow.getWidth() / 3;
@@ -147,7 +148,7 @@ void SliceLane::resized()
 
     header.removeFromTop (2);
     // Cap the knob strip so a tall lane grows its waveform, not its knobs.
-    auto knobRow = header.withTrimmedBottom (11);
+    auto knobRow = header.withTrimmedBottom (15);
     if (knobRow.getHeight() > 54)
         knobRow = knobRow.removeFromTop (54);
     const int knobWidth = knobRow.getWidth() / 4;
@@ -170,20 +171,20 @@ void SliceLane::paint (juce::Graphics& g)
 
     // Header: pad note name (click-and-hold on it auditions).
     g.setColour (active || padPressed ? kWave : juce::Colours::whitesmoke.withAlpha (0.85f));
-    g.setFont (juce::Font (juce::FontOptions { 16.0f, juce::Font::bold }));
+    g.setFont (juce::Font (juce::FontOptions { ui::kFontTitle, juce::Font::bold }));
     g.drawText (juce::MidiMessage::getMidiNoteName (sec->midiNote, true, true, 3),
                 juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 18),
                 juce::Justification::centredLeft);
 
     // Knob labels.
-    g.setColour (juce::Colours::whitesmoke.withAlpha (0.45f));
-    g.setFont (9.0f);
+    g.setColour (juce::Colours::whitesmoke.withAlpha (0.55f));
+    g.setFont (ui::kFontLabel);
     static const char* const knobLabels[] = { "pitch", "fine", "sr", "drive" };
     for (int k = 0; k < 4; ++k)
     {
         const auto* knob = k == 0 ? &pitchKnob : k == 1 ? &fineKnob : k == 2 ? &srKnob : &driveKnob;
         g.drawText (knobLabels[k],
-                    knob->getBounds().withY (knob->getBottom()).withHeight (10),
+                    knob->getBounds().withY (knob->getBottom()).withHeight (14),
                     juce::Justification::centred);
     }
 

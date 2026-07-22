@@ -12,6 +12,8 @@ static void sanitizeLoop (Section& s)
     {
         s.loopStart = -1;
         s.loopEnd = -1;
+        if (s.mode == PlayMode::LoopRun)   // no loop -> no LoopRun
+            s.mode = PlayMode::Gate;
     }
 }
 
@@ -273,6 +275,7 @@ bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int6
 
     sec.loopStart = loopStart;
     sec.loopEnd = loopEnd;
+    sec.mode = PlayMode::LoopRun;   // drawing/editing a loop means: loop it
     return true;
 }
 
@@ -283,6 +286,7 @@ bool clearSectionLoop (Document& doc, int index)
 
     doc.sections[(size_t) index].loopStart = -1;
     doc.sections[(size_t) index].loopEnd = -1;
+    doc.sections[(size_t) index].mode = PlayMode::Gate;
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "WaveDisplay.h"
 
+#include "Knobs.h"
 #include "WaveRender.h"
 
 namespace chops
@@ -99,7 +100,7 @@ void WaveDisplay::paint (juce::Graphics& g)
     if (doc == nullptr || doc->sample == nullptr || peaks == nullptr)
     {
         g.setColour (juce::Colours::whitesmoke.withAlpha (0.6f));
-        g.setFont (22.0f);
+        g.setFont (ui::kFontHint);
         g.drawText ("drop an audio file", getLocalBounds(), juce::Justification::centred);
         return;
     }

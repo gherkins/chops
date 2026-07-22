@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../model/Document.h"
+#include "Knobs.h"
 
 namespace chops
 {
@@ -71,7 +72,7 @@ public:
             }
 
             g.setColour (lit ? juce::Colour (0xff17181c) : juce::Colours::whitesmoke.withAlpha (0.8f));
-            g.setFont (juce::jmin (13.0f, pad.getHeight() * 0.3f));
+            g.setFont (juce::jmin (ui::kFontLabel, pad.getHeight() * 0.3f));
             g.drawText (juce::MidiMessage::getMidiNoteName (
                             doc->sections[(size_t) i].midiNote, true, true, 3),
                         pad, juce::Justification::centred);

@@ -38,6 +38,9 @@ void autoSliceTransients (Document& doc, float sensitivity);
 constexpr juce::int64 kMinLoopFrames = 32;
 
 bool setSectionRange (Document& doc, int index, juce::int64 newStart, juce::int64 newEnd);
+
+// Loop existence drives the mode: setting a loop switches the section to
+// LoopRun, clearing it returns to Gate.
 bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int64 loopEnd);
 bool clearSectionLoop (Document& doc, int index);
 bool setSectionMode (Document& doc, int index, PlayMode mode);

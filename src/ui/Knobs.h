@@ -21,4 +21,10 @@ inline void configureMiniKnob (juce::Slider& s, double min, double max, double d
 // Knob-at-max means "follow the global setting" for per-slice sample rate.
 constexpr double kSrFollowThreshold = 47999.0;
 
+// Type scale — keep to these sizes. The rev toggle sits below kFontLabel via
+// its 15 px button height (JUCE derives toggle fonts from height).
+constexpr float kFontHint = 22.0f;    // empty-state hint
+constexpr float kFontTitle = 16.0f;   // pad note names (bold)
+constexpr float kFontLabel = 13.0f;   // knob labels, info line, pads
+
 } // namespace chops::ui

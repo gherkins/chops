@@ -257,7 +257,7 @@ void ChopsEditor::resized()
     buttonRow.removeFromLeft (4);
     clearButton.setBounds (buttonRow.removeFromLeft (64));
 
-    auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (11);
+    auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (15);
     for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
         k->setBounds (knobArea.removeFromLeft (48));
 
@@ -279,19 +279,19 @@ void ChopsEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff17181c));
 
     // Global knob labels.
-    g.setColour (juce::Colours::whitesmoke.withAlpha (0.45f));
-    g.setFont (9.0f);
+    g.setColour (juce::Colours::whitesmoke.withAlpha (0.55f));
+    g.setFont (chops::ui::kFontLabel);
     {
         const std::pair<const juce::Slider*, const char*> labels[] =
             { { &globalSr, "sr" }, { &globalDrive, "drive" }, { &globalPitch, "pitch" },
               { &globalFine, "fine" }, { &globalGain, "gain" } };
         for (const auto& [knob, text] : labels)
-            g.drawText (text, knob->getBounds().withY (knob->getBottom()).withHeight (10),
+            g.drawText (text, knob->getBounds().withY (knob->getBottom()).withHeight (14),
                         juce::Justification::centred);
     }
 
     const auto info = getLocalBounds().reduced (12).removeFromBottom (22);
-    g.setFont (13.0f);
+    g.setFont (chops::ui::kFontLabel);
 
     if (doc != nullptr && doc->sample != nullptr)
     {
