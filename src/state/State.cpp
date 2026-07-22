@@ -3,6 +3,8 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_data_structures/juce_data_structures.h>
 
+#include "../model/Edits.h"
+
 namespace chops::state
 {
 
@@ -14,6 +16,39 @@ static bool isCompactFormat (const juce::String& extension)
 {
     static const juce::StringArray compact { "flac", "ogg", "oga", "mp3", "m4a", "aac", "opus" };
     return compact.contains (extension);
+}
+
+// FLAC-encode the buffer into the embedded blob. 16-bit sources stay
+// bit-exact; float sources are stored at 24 bit (~-144 dB error, inaudible),
+// and every save/load cycle afterwards is bit-exact.
+static bool encodeFlacBlob (SampleData& sd)
+{
+    sd.embeddedBlob.reset();
+    const int numChannels = sd.buffer.getNumChannels();
+    if (numChannels < 1 || numChannels > 8)
+        return false;
+
+    const int bits = sd.sourceBitDepth <= 16 ? 16 : 24;
+    juce::FlacAudioFormat flac;
+    std::unique_ptr<juce::OutputStream> stream =
+        std::make_unique<juce::MemoryOutputStream> (sd.embeddedBlob, false);
+
+    const auto options = juce::AudioFormatWriterOptions{}
+                             .withSampleRate (sd.sourceSampleRate)
+                             .withNumChannels (numChannels)
+                             .withBitsPerSample (bits)
+                             .withQualityOptionIndex (5);
+
+    bool ok = false;
+    if (auto writer = flac.createWriterFor (stream, options))
+        ok = writer->writeFromAudioSampleBuffer (sd.buffer, 0, sd.buffer.getNumSamples());
+    // The writer is destroyed (and has flushed) before the blob is inspected.
+
+    if (ok)
+        sd.embeddedFormat = "flac";
+    else
+        sd.embeddedBlob.reset();
+    return ok;
 }
 
 std::shared_ptr<SampleData> loadSampleFile (const juce::File& file, juce::String& error)
@@ -53,32 +88,8 @@ std::shared_ptr<SampleData> loadSampleFile (const juce::File& file, juce::String
             sd->embeddedFormat = ext;
     }
 
-    if (sd->embeddedBlob.isEmpty() && numChannels <= 8)
-    {
-        // PCM source: FLAC-encode once. 16-bit sources stay bit-exact; float
-        // sources are stored at 24 bit (~-144 dB error, inaudible), and every
-        // save/load cycle after this one is bit-exact.
-        const int bits = sd->sourceBitDepth <= 16 ? 16 : 24;
-        juce::FlacAudioFormat flac;
-        std::unique_ptr<juce::OutputStream> stream =
-            std::make_unique<juce::MemoryOutputStream> (sd->embeddedBlob, false);
-
-        const auto options = juce::AudioFormatWriterOptions{}
-                                 .withSampleRate (sd->sourceSampleRate)
-                                 .withNumChannels (numChannels)
-                                 .withBitsPerSample (bits)
-                                 .withQualityOptionIndex (5);
-
-        bool flacOk = false;
-        if (auto writer = flac.createWriterFor (stream, options))
-            flacOk = writer->writeFromAudioSampleBuffer (sd->buffer, 0, numFrames);
-        // The writer is destroyed (and has flushed) before the blob is inspected.
-
-        if (flacOk)
-            sd->embeddedFormat = "flac";
-        else
-            sd->embeddedBlob.reset();
-    }
+    if (sd->embeddedBlob.isEmpty())
+        encodeFlacBlob (*sd);
 
     if (sd->embeddedBlob.isEmpty())
     {
@@ -232,6 +243,67 @@ std::unique_ptr<Document> fromMemory (const void* data, size_t size, juce::Strin
         doc->sections.push_back (makeWholeFileSection (*doc->sample, g.rootNote));
 
     return doc;
+}
+
+bool cropToSections (Document& doc, juce::String& error)
+{
+    if (doc.sample == nullptr || doc.sections.empty())
+    {
+        error = "Nothing to crop";
+        return false;
+    }
+
+    const auto total = doc.sample->numFrames();
+    juce::int64 lo = total, hi = 0;
+    for (const auto& sec : doc.sections)
+    {
+        lo = std::min (lo, sec.start);
+        hi = std::max (hi, sec.end);
+    }
+    lo = std::clamp<juce::int64> (lo, 0, total);
+    hi = std::clamp<juce::int64> (hi, 0, total);
+
+    if (lo <= 0 && hi >= total)
+        return false;   // nothing outside the slices
+
+    if (hi - lo < edits::kMinSectionFrames)
+    {
+        error = "Crop range is too short";
+        return false;
+    }
+
+    const auto& source = *doc.sample;
+    auto cropped = std::make_shared<SampleData>();
+    const int numChannels = source.buffer.getNumChannels();
+    const int newFrames = (int) (hi - lo);
+
+    cropped->buffer.setSize (numChannels, newFrames);
+    for (int ch = 0; ch < numChannels; ++ch)
+        cropped->buffer.copyFrom (ch, 0, source.buffer, ch, (int) lo, newFrames);
+
+    cropped->sourceSampleRate = source.sourceSampleRate;
+    cropped->sourceBitDepth = source.sourceBitDepth;
+    cropped->originalPath = source.originalPath;
+
+    if (! encodeFlacBlob (*cropped))
+    {
+        error = "Could not re-encode the cropped sample";
+        return false;
+    }
+
+    doc.sample = std::move (cropped);
+    for (auto& sec : doc.sections)
+    {
+        sec.start = std::clamp<juce::int64> (sec.start - lo, 0, newFrames);
+        sec.end = std::clamp<juce::int64> (sec.end - lo, 0, newFrames);
+        if (sec.hasLoop())
+        {
+            sec.loopStart -= lo;
+            sec.loopEnd -= lo;
+        }
+    }
+
+    return true;
 }
 
 } // namespace chops::state

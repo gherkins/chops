@@ -18,4 +18,10 @@ std::shared_ptr<SampleData> loadSampleFile (const juce::File& file, juce::String
 void toMemory (const Document& doc, juce::MemoryBlock& dest);
 std::unique_ptr<Document> fromMemory (const void* data, size_t size, juce::String& error);
 
+// Hard-discard all audio outside the sections' overall [min start, max end)
+// and re-encode the embedded blob, shifting every section and loop. Lets long
+// files be trimmed right after loading so plugin state never carries minutes
+// of unused audio. Returns false (doc untouched) if there is nothing to crop.
+bool cropToSections (Document& doc, juce::String& error);
+
 } // namespace chops::state

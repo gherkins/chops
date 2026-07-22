@@ -676,6 +676,54 @@ int main (int argc, char* argv[])
         EXPECT (d.sections[1].start == 20000);
     }
 
+    // --- tail trim + crop: discard audio outside the first/last markers ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+
+        EXPECT (chops::edits::moveSectionEnd (d, 0, 30000));
+        EXPECT (d.sections[0].end == 30000);
+        EXPECT (chops::edits::moveSectionEnd (d, 0, kFrames + 999));   // clamps to file end
+        EXPECT (d.sections[0].end == kFrames);
+        EXPECT (chops::edits::moveSectionEnd (d, 0, 10));              // clamps above start
+        EXPECT (d.sections[0].end == chops::edits::kMinSectionFrames);
+
+        // Only the LAST section has a free end.
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (! chops::edits::moveSectionEnd (d, 0, 25000));
+        EXPECT (chops::edits::moveSectionEnd (d, 1, 40000));
+
+        // Crop: trim head and tail, keep a loop, then discard the rest.
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::moveSectionStart (d, 0, 5000));
+        EXPECT (chops::edits::moveSectionEnd (d, 0, 30000));
+        EXPECT (chops::edits::setSectionLoop (d, 0, 10000, 20000));
+        const auto oldBlobSize = d.sample->embeddedBlob.getSize();
+
+        juce::String error;
+        EXPECT (chops::state::cropToSections (d, error));
+        EXPECT (d.sample->numFrames() == 25000);
+        EXPECT (d.sample->buffer.getSample (0, 0) == kLeftValue);
+        EXPECT (d.sections[0].start == 0 && d.sections[0].end == 25000);
+        EXPECT (d.sections[0].loopStart == 5000 && d.sections[0].loopEnd == 15000);
+        EXPECT (d.sample->embeddedBlob.getSize() < oldBlobSize);
+        EXPECT (d.sample->embeddedFormat == "flac");
+
+        // Nothing left to crop; state round-trips bit-exact after cropping.
+        EXPECT (! chops::state::cropToSections (d, error));
+        juce::MemoryBlock cropState;
+        chops::state::toMemory (d, cropState);
+        auto restoredCrop = chops::state::fromMemory (cropState.getData(), cropState.getSize(), error);
+        EXPECT (restoredCrop != nullptr);
+        if (restoredCrop != nullptr)
+        {
+            EXPECT (buffersIdentical (restoredCrop->sample->buffer, d.sample->buffer));
+            EXPECT (restoredCrop->sections[0].loopStart == 5000);
+        }
+    }
+
     // --- polyphony UI snapshots: every playing voice is published ---
     {
         chops::Document d;

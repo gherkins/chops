@@ -9,6 +9,7 @@ namespace chops
 static const juce::Colour kPanel { 0xff22242a };
 static const juce::Colour kWave { 0xff5ec8a8 };
 static const juce::Colour kMarker { 0xffd9a05a };
+static const juce::Colour kEndMarker { 0xff7ab8ff };
 static const juce::Colour kPlayhead { 0xffffffff };
 
 void WaveDisplay::setDocument (std::shared_ptr<const Document> newDoc, const PeakCache* newPeaks)
@@ -71,9 +72,14 @@ void WaveDisplay::zoomAround (double frame, double factor)
     repaint();
 }
 
+int WaveDisplay::endMarkerIndex() const
+{
+    return doc != nullptr ? (int) doc->sections.size() : -1;
+}
+
 int WaveDisplay::hitMarker (juce::Point<int> pos) const
 {
-    if (doc == nullptr)
+    if (doc == nullptr || doc->sections.empty())
         return -1;
 
     int best = -1;
@@ -89,6 +95,10 @@ int WaveDisplay::hitMarker (juce::Point<int> pos) const
             best = i;
         }
     }
+
+    const auto endX = frameToX ((double) doc->sections.back().end);
+    if (std::abs (endX - (double) pos.x) < bestDistance)
+        best = endMarkerIndex();
 
     return best;
 }
@@ -142,6 +152,19 @@ void WaveDisplay::paint (juce::Graphics& g)
         g.fillPath (handle);
     }
 
+    // Tail-trim end marker (the last slice's end), reset by double-click.
+    {
+        const auto x = (float) frameToX ((double) doc->sections.back().end);
+        if (x >= -kHandleHitPx && x <= (float) width + kHandleHitPx)
+        {
+            g.setColour (dragIndex == endMarkerIndex() ? kEndMarker.brighter (0.4f) : kEndMarker);
+            g.fillRect (x - 0.75f, 0.0f, 1.5f, bounds.getHeight());
+            juce::Path handle;
+            handle.addTriangle (x - 6.0f, 0.0f, x + 6.0f, 0.0f, x, 10.0f);
+            g.fillPath (handle);
+        }
+    }
+
     g.setColour (kPlayhead.withAlpha (0.85f));
     for (const auto& [section, frame] : playheads)
     {
@@ -167,8 +190,15 @@ void WaveDisplay::mouseDrag (const juce::MouseEvent& e)
     if (dragIndex >= 0)
     {
         didDrag = true;
-        if (onMoveStart != nullptr)
+        if (dragIndex == endMarkerIndex())
+        {
+            if (onMoveEnd != nullptr)
+                onMoveEnd (xToFrame ((double) e.position.x));
+        }
+        else if (onMoveStart != nullptr)
+        {
             onMoveStart (dragIndex, xToFrame ((double) e.position.x));
+        }
     }
 }
 
@@ -189,8 +219,19 @@ void WaveDisplay::mouseUp (const juce::MouseEvent& e)
 void WaveDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const auto index = hitMarker (e.getPosition());
-    if (index >= 0 && onRemove != nullptr)
+    if (index < 0)
+        return;
+
+    if (index == endMarkerIndex())
+    {
+        // Reset the tail trim to the end of the file.
+        if (onMoveEnd != nullptr && doc != nullptr && doc->sample != nullptr)
+            onMoveEnd (doc->sample->numFrames());
+    }
+    else if (onRemove != nullptr)
+    {
         onRemove (index);
+    }
 }
 
 void WaveDisplay::mouseMove (const juce::MouseEvent& e)

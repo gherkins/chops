@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "model/Edits.h"
+#include "state/State.h"
 #include "ui/Knobs.h"
 
 static bool isAudioFile (const juce::String& path)
@@ -29,6 +30,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     addAndMakeVisible (sliceCountBox);
     addAndMakeVisible (transientButton);
     addAndMakeVisible (clearButton);
+    addAndMakeVisible (cropButton);
 
     for (const int count : { 2, 4, 8, 16, 32 })
         sliceCountBox.addItem (juce::String (count), count);
@@ -42,6 +44,11 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     {
         applyEdit ([index, newStart] (chops::Document& d)
                    { return chops::edits::moveSectionStart (d, index, newStart); });
+    };
+    waveDisplay.onMoveEnd = [this] (juce::int64 newEnd)
+    {
+        applyEdit ([newEnd] (chops::Document& d)
+                   { return chops::edits::moveSectionEnd (d, (int) d.sections.size() - 1, newEnd); });
     };
     waveDisplay.onRemove = [this] (int index)
     {
@@ -146,6 +153,16 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     clearButton.onClick = [this]
     {
         applyEdit ([] (chops::Document& d) { chops::edits::clearSlices (d); return true; });
+    };
+    cropButton.onClick = [this]
+    {
+        // Hard-discards audio outside the first/last markers and re-encodes
+        // the embedded blob, so long files stop weighing down plugin state.
+        applyEdit ([] (chops::Document& d)
+        {
+            juce::String error;
+            return chops::state::cropToSections (d, error);
+        });
     };
 
     refreshFromModel();
@@ -267,6 +284,8 @@ void ChopsEditor::resized()
     transientButton.setBounds (buttonRow.removeFromLeft (92));
     buttonRow.removeFromLeft (4);
     clearButton.setBounds (buttonRow.removeFromLeft (64));
+    buttonRow.removeFromLeft (4);
+    cropButton.setBounds (buttonRow.removeFromLeft (64));
 
     auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (15);
     for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })

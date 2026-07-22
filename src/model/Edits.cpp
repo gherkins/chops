@@ -17,6 +17,11 @@ static void sanitizeLoop (Section& s)
     }
 }
 
+static bool validIndex (const Document& doc, int index)
+{
+    return doc.sample != nullptr && index >= 0 && index < (int) doc.sections.size();
+}
+
 void remapNotesChromatic (Document& doc)
 {
     std::stable_sort (doc.sections.begin(), doc.sections.end(),
@@ -111,6 +116,18 @@ bool moveSectionStart (Document& doc, int index, juce::int64 newStart)
     sec.start = newStart;
     sanitizeLoop (sec);
     remapNotesChromatic (doc);
+    return true;
+}
+
+bool moveSectionEnd (Document& doc, int index, juce::int64 newEnd)
+{
+    if (! validIndex (doc, index) || index != (int) doc.sections.size() - 1)
+        return false;
+
+    auto& sec = doc.sections[(size_t) index];
+    newEnd = std::clamp (newEnd, sec.start + kMinSectionFrames, doc.sample->numFrames());
+    sec.end = newEnd;
+    sanitizeLoop (sec);
     return true;
 }
 
@@ -240,11 +257,6 @@ void autoSliceTransients (Document& doc, float sensitivity)
     }
 
     rebuildFromBounds (doc, partitionBounds (n, onsets));
-}
-
-static bool validIndex (const Document& doc, int index)
-{
-    return doc.sample != nullptr && index >= 0 && index < (int) doc.sections.size();
 }
 
 bool setSectionRange (Document& doc, int index, juce::int64 newStart, juce::int64 newEnd)

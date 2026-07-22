@@ -20,6 +20,10 @@ bool splitAt (Document& doc, juce::int64 frame);
 // follows. Returns the clamped position actually applied.
 bool moveSectionStart (Document& doc, int index, juce::int64 newStart);
 
+// Drag the tail-trim marker: the end of the LAST section, clamped to
+// [start + min, file end]. Other ends are shared boundaries (see above).
+bool moveSectionEnd (Document& doc, int index, juce::int64 newEnd);
+
 // Double-click a marker: remove that section, merging its range into the
 // previous section when they were contiguous.
 bool removeSection (Document& doc, int index);

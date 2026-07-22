@@ -22,6 +22,7 @@ class WaveDisplay : public juce::Component
 public:
     std::function<void (juce::int64 frame)> onSplit;
     std::function<void (int index, juce::int64 newStart)> onMoveStart;
+    std::function<void (juce::int64 newEnd)> onMoveEnd;   // tail-trim marker
     std::function<void (int index)> onRemove;
 
     void setDocument (std::shared_ptr<const Document> newDoc, const PeakCache* newPeaks);
@@ -42,7 +43,9 @@ public:
 private:
     double frameToX (double frame) const;
     juce::int64 xToFrame (double x) const;
-    int hitMarker (juce::Point<int> pos) const;   // section index >= 1, or -1
+    // Start-marker index 0..n-1, n == the tail-trim end marker, -1 == none.
+    int hitMarker (juce::Point<int> pos) const;
+    int endMarkerIndex() const;
     void zoomAround (double frame, double factor);
     void clampView();
 
