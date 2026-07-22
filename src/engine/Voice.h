@@ -22,10 +22,11 @@ public:
     // Live per-block DSP refresh: rate/decimation/drive jump, gain is smoothed.
     void updateFx (const VoiceFx& fx) noexcept;
 
-    // Live per-block loop-region refresh, so dragging loop points tunes the
-    // sounding note. Out-of-range phases re-enter the new region on the next
-    // wrap check.
-    void updateLoop (std::int64_t loopStart, std::int64_t loopEnd, int xfadeFrames) noexcept;
+    // Live per-block loop-region refresh, so dragging loop points (or
+    // switching direction) tunes the sounding note. Out-of-range phases
+    // re-enter the new region on the next wrap check.
+    void updateLoop (std::int64_t loopStart, std::int64_t loopEnd,
+                     int xfadeFrames, LoopDirection loopDir) noexcept;
 
     void render (float* outL, float* outR, int numFrames) noexcept;
 
@@ -43,7 +44,7 @@ private:
     enum class State { Idle, Playing, Releasing, Fading };
 
     float readInterpolated (const float* channel, double pos) const noexcept;
-    float readLooped (const float* channel, double pos, bool looping) const noexcept;
+    float readLooped (const float* channel, double pos, bool jumpFade) const noexcept;
 
     static constexpr int kAttackFrames = 32;       // sub-ms declick on start
     static constexpr double kReleaseSeconds = 0.003;
@@ -55,6 +56,8 @@ private:
     State state = State::Idle;
     double phase = 0.0;          // absolute position in source frames
     double increment = 0.0;
+    int dirSign = 1;             // current travel direction (+1/-1); loop
+                                 // modes may move against the playback dir
     double outputRate_ = 44100.0;
     float velocityGain = 1.0f;
     float rampGain = 1.0f;       // release / fast-fade envelope

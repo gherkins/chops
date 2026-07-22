@@ -80,7 +80,11 @@ republishing.
   anti-aliasing) → `tanh(g*x)/tanh(g)` waveshaper → smoothed gain. LoopRun
   mode: wrap `loopEnd→loopStart` only while `held`; note-off clears `held`, so
   the pass in flight finishes and playback runs through to the section end
-  (Battery loop-until-release + Renoise loop-exit). Sub-ms attack ramp
+  (Battery loop-until-release + Renoise loop-exit). Loops have a per-slice
+  direction (Forward/Backward/PingPong, defined relative to the slice's
+  playback direction); the voice tracks a `dirSign` separate from the main
+  direction, and a note-off while travelling counter-main bounces once at the
+  near boundary before running out. Sub-ms attack ramp
   declicks starts; Gate uses a ~3 ms release ramp.
 - **State** (`src/state/State.cpp`): flagship always-embed requirement. The
   compressed blob is built ONCE at sample load (already-compressed sources

@@ -33,6 +33,7 @@ struct Section
     juce::int64 loopStart = -1;           // -1 == no loop region
     juce::int64 loopEnd = -1;
     PlayMode mode = PlayMode::Gate;
+    LoopDirection loopDir = LoopDirection::Forward;
     bool reverse = false;
     int pitchSemis = 0;
     float fineCents = 0.0f;

@@ -102,6 +102,7 @@ static void writeSection (juce::ValueTree& parent, const Section& s)
     t.setProperty ("loopStart", s.loopStart, nullptr);
     t.setProperty ("loopEnd", s.loopEnd, nullptr);
     t.setProperty ("mode", (int) s.mode, nullptr);
+    t.setProperty ("loopDir", (int) s.loopDir, nullptr);
     t.setProperty ("reverse", s.reverse, nullptr);
     t.setProperty ("pitchSemis", s.pitchSemis, nullptr);
     t.setProperty ("fineCents", s.fineCents, nullptr);
@@ -121,6 +122,7 @@ static Section readSection (const juce::ValueTree& t)
     s.loopStart = t.getProperty ("loopStart", -1);
     s.loopEnd = t.getProperty ("loopEnd", -1);
     s.mode = (PlayMode) (int) t.getProperty ("mode", (int) PlayMode::Gate);
+    s.loopDir = (LoopDirection) (int) t.getProperty ("loopDir", (int) LoopDirection::Forward);
     s.reverse = t.getProperty ("reverse", false);
     s.pitchSemis = t.getProperty ("pitchSemis", 0);
     s.fineCents = t.getProperty ("fineCents", 0.0f);

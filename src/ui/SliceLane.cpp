@@ -14,7 +14,8 @@ static const juce::Colour kLoop { 0xff7ab8ff };
 
 SliceLane::SliceLane()
 {
-    for (auto* b : { &loopButton, &oneShotButton, &gateButton, &reverseButton })
+    for (auto* b : { &loopButton, &oneShotButton, &gateButton,
+                     &loopFwdButton, &loopBackButton, &loopPingPongButton, &reverseButton })
     {
         addAndMakeVisible (*b);
         b->setColour (juce::TextButton::buttonOnColourId, kWave);
@@ -22,21 +23,30 @@ SliceLane::SliceLane()
     }
     reverseButton.setClickingTogglesState (true);
 
-    // The mode buttons form one segmented three-way toggle: a shared radio
-    // group (exactly one always on) with connected edges so the segments
-    // render as a single element.
-    for (auto* b : { &loopButton, &oneShotButton, &gateButton })
+    // Two segmented three-way toggles (mode, loop direction): a radio group
+    // per row (exactly one always on) with connected edges so each row
+    // renders as a single element. Distinct group ids — same parent.
+    const auto makeSegmented = [] (juce::TextButton& left, juce::TextButton& mid,
+                                   juce::TextButton& right, int groupId)
     {
-        b->setClickingTogglesState (true);
-        b->setRadioGroupId (1);
-    }
-    loopButton.setConnectedEdges (juce::Button::ConnectedOnRight);
-    oneShotButton.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
-    gateButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
+        for (auto* b : { &left, &mid, &right })
+        {
+            b->setClickingTogglesState (true);
+            b->setRadioGroupId (groupId);
+        }
+        left.setConnectedEdges (juce::Button::ConnectedOnRight);
+        mid.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
+        right.setConnectedEdges (juce::Button::ConnectedOnLeft);
+    };
+    makeSegmented (loopButton, oneShotButton, gateButton, 1);
+    makeSegmented (loopFwdButton, loopBackButton, loopPingPongButton, 2);
 
     loopButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::LoopRun); };
     oneShotButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::OneShot); };
     gateButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::Gate); };
+    loopFwdButton.onClick = [this] { if (onSetLoopDir) onSetLoopDir (index, LoopDirection::Forward); };
+    loopBackButton.onClick = [this] { if (onSetLoopDir) onSetLoopDir (index, LoopDirection::Backward); };
+    loopPingPongButton.onClick = [this] { if (onSetLoopDir) onSetLoopDir (index, LoopDirection::PingPong); };
     reverseButton.onClick = [this]
     {
         if (onSetReverse)
@@ -90,6 +100,9 @@ void SliceLane::bind (int sectionIndex, std::shared_ptr<const Document> newDoc, 
         loopButton.setToggleState (sec->mode == PlayMode::LoopRun, juce::dontSendNotification);
         oneShotButton.setToggleState (sec->mode == PlayMode::OneShot, juce::dontSendNotification);
         gateButton.setToggleState (sec->mode == PlayMode::Gate, juce::dontSendNotification);
+        loopFwdButton.setToggleState (sec->loopDir == LoopDirection::Forward, juce::dontSendNotification);
+        loopBackButton.setToggleState (sec->loopDir == LoopDirection::Backward, juce::dontSendNotification);
+        loopPingPongButton.setToggleState (sec->loopDir == LoopDirection::PingPong, juce::dontSendNotification);
         reverseButton.setToggleState (sec->reverse, juce::dontSendNotification);
         pitchKnob.setValue (sec->pitchSemis, juce::dontSendNotification);
         fineKnob.setValue (sec->fineCents, juce::dontSendNotification);
@@ -155,6 +168,11 @@ void SliceLane::resized()
     loopButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     gateButton.setBounds (modeRow);
+
+    auto loopDirRow = header.removeFromTop (22).reduced (0, 1);
+    loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
+    loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
+    loopPingPongButton.setBounds (loopDirRow);
 
     header.removeFromTop (2);
     // Cap the knob strip so a tall lane grows its waveform, not its knobs.

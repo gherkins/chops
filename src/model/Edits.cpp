@@ -290,6 +290,15 @@ bool clearSectionLoop (Document& doc, int index)
     return true;
 }
 
+bool setSectionLoopDirection (Document& doc, int index, LoopDirection dir)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].loopDir = dir;
+    return true;
+}
+
 bool setSectionMode (Document& doc, int index, PlayMode mode)
 {
     if (! validIndex (doc, index))

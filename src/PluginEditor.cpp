@@ -20,7 +20,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
 {
     setSize (900, 600);
     setResizable (true, true);
-    setResizeLimits (600, 400, 4096, 4096);
+    setResizeLimits (600, 460, 4096, 4096);
 
     addAndMakeVisible (waveDisplay);
     addAndMakeVisible (sliceLane);
@@ -72,6 +72,11 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     {
         applyEdit ([index, mode] (chops::Document& d)
                    { return chops::edits::setSectionMode (d, index, mode); });
+    };
+    sliceLane.onSetLoopDir = [this] (int index, chops::LoopDirection dir)
+    {
+        applyEdit ([index, dir] (chops::Document& d)
+                   { return chops::edits::setSectionLoopDirection (d, index, dir); });
     };
     sliceLane.onSetReverse = [this] (int index, bool reverse)
     {

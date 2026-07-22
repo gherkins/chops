@@ -42,6 +42,7 @@ void Voice::start (const SampleView& sample, const VoiceParams& params, const Vo
     // Reverse starts on the last frame inside the section.
     phase = params_.reverse ? (double) (params_.end - 1) : (double) params_.start;
     increment = fx_.rate;
+    dirSign = params_.reverse ? -1 : 1;
     held = true;
     state = State::Playing;
 }
@@ -52,11 +53,13 @@ void Voice::updateFx (const VoiceFx& fx) noexcept
     increment = fx.rate;
 }
 
-void Voice::updateLoop (std::int64_t loopStart, std::int64_t loopEnd, int xfadeFrames) noexcept
+void Voice::updateLoop (std::int64_t loopStart, std::int64_t loopEnd,
+                        int xfadeFrames, LoopDirection loopDir) noexcept
 {
     params_.loopStart = loopStart;
     params_.loopEnd = loopEnd;
     params_.xfadeFrames = xfadeFrames;
+    params_.loopDir = loopDir;
 }
 
 void Voice::noteOff() noexcept
@@ -114,18 +117,19 @@ float Voice::readInterpolated (const float* channel, double pos) const noexcept
                    + (3.0f * (p1 - p2) + p3 - p0) * t * t * t);
 }
 
-float Voice::readLooped (const float* channel, double pos, bool looping) const noexcept
+float Voice::readLooped (const float* channel, double pos, bool jumpFade) const noexcept
 {
     float value = readInterpolated (channel, pos);
 
-    // Loop crossfade: approaching the wrap point, blend in the material from
-    // one loop-length away so the wrap itself is seamless.
-    if (looping && params_.xfadeFrames > 0)
+    // Loop crossfade: approaching a jump-cut wrap, blend in the material from
+    // one loop-length away so the wrap itself is seamless. Keyed on the
+    // current travel direction (PingPong reflections have no jump to hide).
+    if (jumpFade && params_.xfadeFrames > 0)
     {
         const auto loopLength = (double) (params_.loopEnd - params_.loopStart);
         const auto xfade = (double) params_.xfadeFrames;
 
-        if (! params_.reverse)
+        if (dirSign > 0)
         {
             const double toWrap = (double) params_.loopEnd - pos;
             if (toWrap < xfade && pos >= (double) params_.loopStart)
@@ -159,7 +163,13 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
     const bool stereoSrc = srcR != srcL;
 
     const bool canLoop = params_.mode == PlayMode::LoopRun && params_.hasLoop();
-    const auto loopLength = canLoop ? (double) (params_.loopEnd - params_.loopStart) : 0.0;
+    const auto loopStart = (double) params_.loopStart;
+    const auto loopEnd = (double) params_.loopEnd;
+    const auto loopLength = canLoop ? loopEnd - loopStart : 0.0;
+    const int mainSign = params_.reverse ? -1 : 1;
+    // The direction a settled loop travels in: with the sample for Forward,
+    // against it for Backward. Jump-cut crossfades only apply on that leg.
+    const int steadySign = params_.loopDir == LoopDirection::Backward ? -mainSign : mainSign;
 
     // Per-block DSP constants.
     const double decimIncrement = fx_.decimHz > 0.0 ? fx_.decimHz / outputRate_ : 0.0;
@@ -172,26 +182,92 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
     {
         const bool looping = canLoop && held;
 
-        // fmod, not a subtraction loop: live loop edits can leave the phase
-        // arbitrarily far outside the region, and re-entry must stay O(1).
+        // Boundary handling. fmod, not subtraction loops: live loop edits can
+        // leave the phase arbitrarily far outside, re-entry must stay O(1).
         if (looping)
         {
-            if (! params_.reverse)
+            switch (params_.loopDir)
             {
-                if (phase >= (double) params_.loopEnd)
-                    phase = (double) params_.loopStart
-                            + std::fmod (phase - (double) params_.loopStart, loopLength);
-            }
-            else
-            {
-                if (phase < (double) params_.loopStart)
-                    phase = (double) params_.loopEnd
-                            - std::fmod ((double) params_.loopEnd - phase, loopLength);
+                case LoopDirection::Forward:
+                    dirSign = mainSign;   // restores direction after a live switch
+                    if (mainSign > 0)
+                    {
+                        if (phase >= loopEnd)
+                            phase = loopStart + std::fmod (phase - loopStart, loopLength);
+                    }
+                    else
+                    {
+                        if (phase < loopStart)
+                            phase = loopEnd - std::fmod (loopEnd - phase, loopLength);
+                    }
+                    break;
+
+                case LoopDirection::Backward:
+                    // Entry reflects at the far boundary; the settled loop
+                    // then wraps with a jump-cut at the near one.
+                    if (mainSign > 0)
+                    {
+                        if (dirSign > 0 && phase >= loopEnd)
+                        {
+                            phase = loopEnd - std::fmod (phase - loopEnd, loopLength);
+                            dirSign = -1;
+                        }
+                        else if (dirSign < 0 && phase < loopStart)
+                        {
+                            phase = loopEnd - std::fmod (loopStart - phase, loopLength);
+                        }
+                    }
+                    else
+                    {
+                        if (dirSign < 0 && phase < loopStart)
+                        {
+                            phase = loopStart + std::fmod (loopStart - phase, loopLength);
+                            dirSign = 1;
+                        }
+                        else if (dirSign > 0 && phase >= loopEnd)
+                        {
+                            phase = loopStart + std::fmod (phase - loopEnd, loopLength);
+                        }
+                    }
+                    break;
+
+                case LoopDirection::PingPong:
+                    if (dirSign > 0 && phase >= loopEnd)
+                    {
+                        phase = loopEnd - std::fmod (phase - loopEnd, loopLength);
+                        dirSign = -1;
+                    }
+                    else if (dirSign < 0 && phase < loopStart)
+                    {
+                        phase = loopStart + std::fmod (loopStart - phase, loopLength);
+                        dirSign = 1;
+                    }
+                    break;
             }
         }
+        else if (canLoop && dirSign != mainSign)
+        {
+            // Released while travelling against the playback direction:
+            // bounce once at the near boundary, then run out to the end —
+            // the counter pass becomes the final loop pass.
+            if (mainSign > 0 && phase < loopStart)
+            {
+                phase = loopStart + (loopStart - phase);
+                dirSign = 1;
+            }
+            else if (mainSign < 0 && phase >= loopEnd)
+            {
+                phase = loopEnd - (phase - loopEnd);
+                dirSign = -1;
+            }
+        }
+        else if (! canLoop)
+        {
+            dirSign = mainSign;   // loop removed live: restore direction
+        }
 
-        if (params_.reverse ? (phase < (double) params_.start)
-                            : (phase >= (double) params_.end))
+        if (mainSign > 0 ? (phase >= (double) params_.end)
+                         : (phase < (double) params_.start))
         {
             state = State::Idle;
             return;
@@ -217,8 +293,10 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
             gain *= rampGain;
         }
 
-        float l = readLooped (srcL, phase, looping);
-        float r = stereoSrc ? readLooped (srcR, phase, looping) : l;
+        const bool jumpFade = looping && params_.loopDir != LoopDirection::PingPong
+                              && dirSign == steadySign;
+        float l = readLooped (srcL, phase, jumpFade);
+        float r = stereoSrc ? readLooped (srcR, phase, jumpFade) : l;
 
         if (decimIncrement > 0.0)
         {
@@ -249,7 +327,7 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
             outL[i] += 0.5f * (l + r) * gain;
         }
 
-        phase += params_.reverse ? -increment : increment;
+        phase += dirSign * increment;
     }
 }
 

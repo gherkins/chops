@@ -24,6 +24,7 @@ public:
     std::function<void (int, juce::int64, juce::int64)> onSetLoop;
     std::function<void (int)> onClearLoop;
     std::function<void (int, PlayMode)> onSetMode;
+    std::function<void (int, LoopDirection)> onSetLoopDir;
     std::function<void (int, bool)> onSetReverse;
     std::function<void (int, int, float)> onSetPitch;      // semis, cents
     std::function<void (int, double)> onSetSr;             // Hz, 0 = follow global
@@ -73,6 +74,7 @@ private:
     bool padPressed = false;
 
     juce::TextButton loopButton { "loop" }, oneShotButton { "1shot" }, gateButton { "gate" };
+    juce::TextButton loopFwdButton { "fwd" }, loopBackButton { "rev" }, loopPingPongButton { "pp" };
     juce::TextButton reverseButton { "rev" };   // toggle-styled like the mode row
     juce::Slider pitchKnob, fineKnob, srKnob, driveKnob;
 

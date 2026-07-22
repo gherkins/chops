@@ -77,6 +77,7 @@ void Engine::startSectionVoice (const Document& doc, int sectionIdx, int note, f
     p.loopStart = sec.loopStart;
     p.loopEnd = sec.loopEnd;
     p.mode = sec.mode;
+    p.loopDir = sec.loopDir;
     p.reverse = sec.reverse;
     p.xfadeFrames = sec.xfadeFrames;
 
@@ -169,7 +170,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
                 const auto& sec = doc->sections[(size_t) v.sectionIndex()];
                 v.updateFx (resolveFx (sec, doc->global,
                                        doc->sample->sourceSampleRate, hostRate));
-                v.updateLoop (sec.loopStart, sec.loopEnd, sec.xfadeFrames);
+                v.updateLoop (sec.loopStart, sec.loopEnd, sec.xfadeFrames, sec.loopDir);
             }
         }
     }

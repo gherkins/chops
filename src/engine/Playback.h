@@ -15,6 +15,15 @@ enum class PlayMode : int
     Gate    = 2,   // plays while held, short release ramp on note-off
 };
 
+// Loop traversal, relative to the slice's playback direction: "Forward" runs
+// with the sample (backwards when the slice is reversed).
+enum class LoopDirection : int
+{
+    Forward  = 0,  // wrap far boundary -> near boundary
+    Backward = 1,  // loop plays against the playback direction
+    PingPong = 2,  // bounce between the boundaries
+};
+
 // Non-owning view into decoded sample data. The owner (Document/SampleData)
 // must outlive any voice reading through it; the engine guarantees this by
 // fading voices out well inside RealtimeSwap's reclamation window.
@@ -35,6 +44,7 @@ struct VoiceParams
     std::int64_t loopStart = -1;   // -1 == no loop region
     std::int64_t loopEnd = -1;
     PlayMode mode = PlayMode::OneShot;
+    LoopDirection loopDir = LoopDirection::Forward;
     bool reverse = false;
     int xfadeFrames = 0;           // loop crossfade
 

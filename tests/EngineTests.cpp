@@ -512,6 +512,81 @@ int main (int argc, char* argv[])
         EXPECT (rendered[5350] == 1150.0f);   // one 200-frame period later
     }
 
+    // --- loop directions: Backward and PingPong on the identity ramp ---
+    {
+        const auto makeRampDoc = [&] (chops::LoopDirection dir)
+        {
+            auto ramp = std::make_shared<chops::SampleData>();
+            ramp->buffer.setSize (1, kFrames);
+            for (int i = 0; i < kFrames; ++i)
+                ramp->buffer.setSample (0, i, (float) i);
+            ramp->embeddedBlob.append ("x", 1);
+
+            chops::Document d;
+            d.sample = ramp;
+            chops::edits::clearSlices (d);
+            EXPECT (chops::edits::setSectionLoop (d, 0, 1000, 2000));
+            EXPECT (chops::edits::setSectionLoopDirection (d, 0, dir));
+            return d;
+        };
+
+        const auto renderHeld = [] (chops::Engine& engine, int frames, int noteOffAt)
+        {
+            std::vector<float> rendered;
+            juce::AudioBuffer<float> block (1, 512);
+            for (int blockStart = 0; blockStart < frames; blockStart += 512)
+            {
+                block.clear();
+                juce::MidiBuffer midi;
+                if (blockStart == 0)
+                    addNoteOn (midi, 36, 0);
+                if (blockStart == noteOffAt)
+                    addNoteOff (midi, 36, 0);
+                engine.process (block, midi);
+                rendered.insert (rendered.end(), block.getReadPointer (0),
+                                 block.getReadPointer (0) + 512);
+            }
+            return rendered;
+        };
+
+        {
+            // Backward: forward into the loop, reflect at the end, then the
+            // settled loop runs 2000 -> 1000 with a jump back to 1999.
+            auto d = makeRampDoc (chops::LoopDirection::Backward);
+            chops::Engine engine;
+            engine.prepare (kRate, 512);
+            engine.publishDocument (std::make_unique<const chops::Document> (d));
+
+            const auto out = renderHeld (engine, 6656, 3072);
+            EXPECT (out[1500] == 1500.0f);   // pre-loop, forward
+            EXPECT (out[2000] == 2000.0f);   // reflection point
+            EXPECT (out[2001] == 1999.0f);   // now travelling backward
+            EXPECT (out[3000] == 1000.0f);   // reached loop start...
+            EXPECT (out[3001] == 1999.0f);   // ...jump-cut back near the end
+
+            // Note-off at 3072 (phase 1928, still moving backward): the pass
+            // finishes to the loop start, bounces, and runs out forward.
+            EXPECT (out[4000] == 1000.0f);
+            EXPECT (out[4001] == 1001.0f);   // release bounce at the boundary
+            EXPECT (out[5001] == 2001.0f);   // escaped the loop
+            EXPECT (out[6000] == 3000.0f);   // deep into the tail
+        }
+
+        {
+            // PingPong: bounce at both boundaries, no jump-cuts.
+            auto d = makeRampDoc (chops::LoopDirection::PingPong);
+            chops::Engine engine;
+            engine.prepare (kRate, 512);
+            engine.publishDocument (std::make_unique<const chops::Document> (d));
+
+            const auto out = renderHeld (engine, 4608, -1);
+            EXPECT (out[2000] == 2000.0f);   // first bounce
+            EXPECT (out[2500] == 1500.0f);   // travelling backward
+            EXPECT (out[3001] == 1001.0f);   // bounced forward at the start
+            EXPECT (out[4000] == 2000.0f);   // full 2000-frame period
+        }
+    }
+
     // --- reverse playback ---
     {
         auto ramp = std::make_shared<chops::SampleData>();

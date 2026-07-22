@@ -43,6 +43,7 @@ bool setSectionRange (Document& doc, int index, juce::int64 newStart, juce::int6
 // LoopRun, clearing it returns to Gate.
 bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int64 loopEnd);
 bool clearSectionLoop (Document& doc, int index);
+bool setSectionLoopDirection (Document& doc, int index, LoopDirection dir);
 bool setSectionMode (Document& doc, int index, PlayMode mode);
 bool setSectionReverse (Document& doc, int index, bool reverse);
 bool setSectionPitch (Document& doc, int index, int semis, float cents);
