@@ -45,7 +45,39 @@ bool splitAt (Document& doc, juce::int64 frame)
         }
     }
 
-    return false;
+    // Inside a section but too close to one of its edges: rejected.
+    for (const auto& sec : doc.sections)
+        if (frame >= sec.start && frame < sec.end)
+            return false;
+
+    // The frame lies in a gap (possible in states saved before boundaries
+    // became main-wave-only, e.g. via the old lane end handle). Clicking in
+    // the ignored region heals it: the previous slice extends to the click,
+    // and a new slice covers the click up to the next slice (or file end).
+    const auto total = doc.sample->numFrames();
+
+    juce::int64 nextStart = total;
+    for (const auto& sec : doc.sections)
+        if (sec.start > frame)
+            nextStart = std::min (nextStart, sec.start);
+
+    if (frame < 0 || nextStart - frame < kMinSectionFrames)
+        return false;
+
+    Section* previous = nullptr;
+    for (auto& sec : doc.sections)
+        if (sec.end <= frame && (previous == nullptr || sec.end > previous->end))
+            previous = &sec;
+
+    if (previous != nullptr)
+        previous->end = frame;
+
+    Section fresh;
+    fresh.start = frame;
+    fresh.end = nextStart;
+    doc.sections.push_back (fresh);
+    remapNotesChromatic (doc);
+    return true;
 }
 
 bool moveSectionStart (Document& doc, int index, juce::int64 newStart)
@@ -63,11 +95,10 @@ bool moveSectionStart (Document& doc, int index, juce::int64 newStart)
 
     newStart = std::clamp (newStart, lo, hi);
 
-    if (prev.end == sec.start)   // linked partition boundary
-    {
-        prev.end = newStart;
-        sanitizeLoop (prev);
-    }
+    // Markers define partition boundaries: dragging one always moves the
+    // shared edge, healing any gap or overlap left by older states.
+    prev.end = newStart;
+    sanitizeLoop (prev);
 
     sec.start = newStart;
     sanitizeLoop (sec);
@@ -82,11 +113,12 @@ bool removeSection (Document& doc, int index)
 
     const auto removed = doc.sections[(size_t) index];
 
+    // The previous slice absorbs the removed range, including any gap
+    // between the two (never shrinking).
     if (index > 0)
     {
         auto& prev = doc.sections[(size_t) index - 1];
-        if (prev.end == removed.start)
-            prev.end = removed.end;
+        prev.end = std::max (prev.end, removed.end);
     }
 
     doc.sections.erase (doc.sections.begin() + index);

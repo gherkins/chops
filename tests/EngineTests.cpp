@@ -567,6 +567,67 @@ int main (int argc, char* argv[])
         EXPECT (! d.sections[0].hasLoop());
     }
 
+    // --- gap healing: states saved before boundaries became main-wave-only
+    // can hold sections with gaps (e.g. a shortened slice); every partition
+    // edit must heal them instead of getting stuck ---
+    {
+        // Reproduce the reported bug: slice "thinks" it is shorter than it
+        // is, leaving an ignored region before the next slice.
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (chops::edits::setSectionRange (d, 0, 0, 10000));   // gap: [10000, 20000)
+
+        // Clicking in the ignored region adds a marker there: the shortened
+        // slice extends to the click and a new slice covers the rest of the gap.
+        EXPECT (chops::edits::splitAt (d, 15000));
+        EXPECT (d.sections.size() == 3);
+        EXPECT (d.sections[0].start == 0 && d.sections[0].end == 15000);
+        EXPECT (d.sections[1].start == 15000 && d.sections[1].end == 20000);
+        EXPECT (d.sections[2].start == 20000 && d.sections[2].end == kFrames);
+        for (int i = 0; i < 3; ++i)
+            EXPECT (d.sections[(size_t) i].midiNote == 36 + i);
+    }
+
+    {
+        // Dragging the next slice's marker heals the boundary unconditionally.
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (chops::edits::setSectionRange (d, 0, 0, 10000));   // gap: [10000, 20000)
+
+        EXPECT (chops::edits::moveSectionStart (d, 1, 12000));
+        EXPECT (d.sections[0].end == 12000 && d.sections[1].start == 12000);
+
+        // Removing a slice absorbs the removed range plus any gap before it.
+        EXPECT (chops::edits::setSectionRange (d, 0, 0, 5000));    // new gap: [5000, 12000)
+        EXPECT (chops::edits::removeSection (d, 1));
+        EXPECT (d.sections.size() == 1);
+        EXPECT (d.sections[0].start == 0 && d.sections[0].end == kFrames);
+    }
+
+    {
+        // Gap at the file head: clicking before the first slice creates one.
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::setSectionRange (d, 0, 30000, kFrames));
+        EXPECT (chops::edits::splitAt (d, 2000));
+        EXPECT (d.sections.size() == 2);
+        EXPECT (d.sections[0].start == 2000 && d.sections[0].end == 30000);
+        EXPECT (d.sections[0].midiNote == 36 && d.sections[1].midiNote == 37);
+
+        // Gap at the file tail: the last slice extends to the click and a new
+        // slice runs to the end of the file.
+        EXPECT (chops::edits::setSectionRange (d, 1, 30000, 40000));
+        EXPECT (chops::edits::splitAt (d, 42000));
+        EXPECT (d.sections.size() == 3);
+        EXPECT (d.sections[1].end == 42000);
+        EXPECT (d.sections[2].start == 42000 && d.sections[2].end == kFrames);
+    }
+
     // --- lo-fi DSP: sample-and-hold decimation, drive shaper, live update ---
     {
         auto ramp = std::make_shared<chops::SampleData>();
