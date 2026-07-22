@@ -304,6 +304,10 @@ bool setSectionMode (Document& doc, int index, PlayMode mode)
     if (! validIndex (doc, index))
         return false;
 
+    // LoopRun requires a loop region (drawing one switches the mode anyway).
+    if (mode == PlayMode::LoopRun && ! doc.sections[(size_t) index].hasLoop())
+        return false;
+
     doc.sections[(size_t) index].mode = mode;
     return true;
 }

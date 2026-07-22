@@ -643,6 +643,14 @@ int main (int argc, char* argv[])
         EXPECT (chops::edits::setSectionRange (d, 0, 100, 20000));
         EXPECT (! d.sections[0].hasLoop());
         EXPECT (d.sections[0].mode == chops::PlayMode::Gate);
+
+        // LoopRun cannot be selected without a loop region.
+        EXPECT (! chops::edits::setSectionMode (d, 0, chops::PlayMode::LoopRun));
+        EXPECT (d.sections[0].mode == chops::PlayMode::Gate);
+        EXPECT (chops::edits::setSectionLoop (d, 0, 5000, 9000));
+        EXPECT (d.sections[0].mode == chops::PlayMode::LoopRun);
+        EXPECT (chops::edits::setSectionMode (d, 0, chops::PlayMode::OneShot));
+        EXPECT (chops::edits::setSectionMode (d, 0, chops::PlayMode::LoopRun));   // loop exists
     }
 
     // --- polyphony UI snapshots: every playing voice is published ---

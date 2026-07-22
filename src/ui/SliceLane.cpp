@@ -104,6 +104,12 @@ void SliceLane::bind (int sectionIndex, std::shared_ptr<const Document> newDoc, 
         loopBackButton.setToggleState (sec->loopDir == LoopDirection::Backward, juce::dontSendNotification);
         loopPingPongButton.setToggleState (sec->loopDir == LoopDirection::PingPong, juce::dontSendNotification);
         reverseButton.setToggleState (sec->reverse, juce::dontSendNotification);
+
+        // Loop mode needs a loop region; loop direction needs loop mode.
+        const bool hasLoop = sec->hasLoop();
+        loopButton.setEnabled (hasLoop);
+        for (auto* b : { &loopFwdButton, &loopBackButton, &loopPingPongButton })
+            b->setEnabled (hasLoop && sec->mode == PlayMode::LoopRun);
         pitchKnob.setValue (sec->pitchSemis, juce::dontSendNotification);
         fineKnob.setValue (sec->fineCents, juce::dontSendNotification);
         srKnob.setValue (sec->srOverride > 0.0 ? sec->srOverride : 48000.0,
