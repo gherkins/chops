@@ -107,7 +107,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     sliceLane.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
 
     // Global FX strip.
-    chops::ui::configureMiniKnob (globalSr, 300.0, 48000.0, 48000.0, 0.0, 4000.0);
+    chops::ui::configureMiniKnob (globalSr, 300.0, 48000.0, 48000.0, 0.0, 4000.0, 0);
     chops::ui::configureMiniKnob (globalDrive, 0.0, 1.0, 0.0);
     chops::ui::configureMiniKnob (globalPitch, -24.0, 24.0, 0.0, 1.0);
     chops::ui::configureMiniKnob (globalFine, -100.0, 100.0, 0.0, 1.0);

@@ -55,7 +55,7 @@ SliceLane::SliceLane()
 
     ui::configureMiniKnob (pitchKnob, -24.0, 24.0, 0.0, 1.0);
     ui::configureMiniKnob (fineKnob, -100.0, 100.0, 0.0, 1.0);
-    ui::configureMiniKnob (srKnob, 300.0, 48000.0, 48000.0, 0.0, 4000.0);
+    ui::configureMiniKnob (srKnob, 300.0, 48000.0, 48000.0, 0.0, 4000.0, 0);
     ui::configureMiniKnob (driveKnob, -0.05, 1.0, -0.05);
     for (auto* k : { &pitchKnob, &fineKnob, &srKnob, &driveKnob })
         addAndMakeVisible (*k);
