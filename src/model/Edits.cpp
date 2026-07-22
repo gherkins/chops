@@ -202,4 +202,74 @@ void autoSliceTransients (Document& doc, float sensitivity)
     rebuildFromBounds (doc, partitionBounds (n, onsets));
 }
 
+static bool validIndex (const Document& doc, int index)
+{
+    return doc.sample != nullptr && index >= 0 && index < (int) doc.sections.size();
+}
+
+bool setSectionRange (Document& doc, int index, juce::int64 newStart, juce::int64 newEnd)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    const auto total = doc.sample->numFrames();
+    newStart = std::clamp<juce::int64> (newStart, 0, total);
+    newEnd = std::clamp<juce::int64> (newEnd, 0, total);
+    if (newEnd - newStart < kMinSectionFrames)
+        return false;
+
+    auto& sec = doc.sections[(size_t) index];
+    sec.start = newStart;
+    sec.end = newEnd;
+    sanitizeLoop (sec);
+    return true;
+}
+
+bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int64 loopEnd)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    auto& sec = doc.sections[(size_t) index];
+    if (loopStart > loopEnd)
+        std::swap (loopStart, loopEnd);
+
+    loopStart = std::clamp (loopStart, sec.start, sec.end);
+    loopEnd = std::clamp (loopEnd, sec.start, sec.end);
+    if (loopEnd - loopStart < kMinLoopFrames)
+        return false;
+
+    sec.loopStart = loopStart;
+    sec.loopEnd = loopEnd;
+    return true;
+}
+
+bool clearSectionLoop (Document& doc, int index)
+{
+    if (! validIndex (doc, index) || ! doc.sections[(size_t) index].hasLoop())
+        return false;
+
+    doc.sections[(size_t) index].loopStart = -1;
+    doc.sections[(size_t) index].loopEnd = -1;
+    return true;
+}
+
+bool setSectionMode (Document& doc, int index, PlayMode mode)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].mode = mode;
+    return true;
+}
+
+bool setSectionReverse (Document& doc, int index, bool reverse)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].reverse = reverse;
+    return true;
+}
+
 } // namespace chops::edits

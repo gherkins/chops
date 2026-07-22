@@ -32,6 +32,7 @@ target_sources(chops PRIVATE
     src/engine/Voice.cpp
     src/model/Edits.cpp
     src/state/State.cpp
+    src/ui/SliceLane.cpp
     src/ui/WaveDisplay.cpp)
 
 target_compile_definitions(chops PUBLIC

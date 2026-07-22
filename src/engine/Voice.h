@@ -35,6 +35,7 @@ private:
     enum class State { Idle, Playing, Releasing, Fading };
 
     float readInterpolated (const float* channel, double pos) const noexcept;
+    float readLooped (const float* channel, double pos, bool looping) const noexcept;
 
     static constexpr int kAttackFrames = 32;       // sub-ms declick on start
     static constexpr double kReleaseSeconds = 0.003;
@@ -50,6 +51,7 @@ private:
     float rampGain = 1.0f;       // release / fast-fade envelope
     float rampStep = 0.0f;
     int attackRemaining = 0;
+    bool held = false;           // LoopRun: wraps only while the note is held
     int midiNote_ = -1;
     int sectionIndex_ = -1;
     std::uint64_t serial_ = 0;

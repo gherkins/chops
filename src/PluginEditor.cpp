@@ -22,6 +22,9 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     setResizeLimits (600, 400, 4096, 4096);
 
     addAndMakeVisible (waveDisplay);
+    addAndMakeVisible (laneViewport);
+    laneViewport.setViewedComponent (&laneList, false);
+    laneViewport.setScrollBarsShown (true, false);
     addAndMakeVisible (padStrip);
     addAndMakeVisible (sliceEqualButton);
     addAndMakeVisible (sliceCountBox);
@@ -46,6 +49,33 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         applyEdit ([index] (chops::Document& d) { return chops::edits::removeSection (d, index); });
     };
     padStrip.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
+
+    laneList.onSetRange = [this] (int index, juce::int64 s, juce::int64 e)
+    {
+        applyEdit ([index, s, e] (chops::Document& d)
+                   { return chops::edits::setSectionRange (d, index, s, e); });
+    };
+    laneList.onSetLoop = [this] (int index, juce::int64 s, juce::int64 e)
+    {
+        applyEdit ([index, s, e] (chops::Document& d)
+                   { return chops::edits::setSectionLoop (d, index, s, e); });
+    };
+    laneList.onClearLoop = [this] (int index)
+    {
+        applyEdit ([index] (chops::Document& d)
+                   { return chops::edits::clearSectionLoop (d, index); });
+    };
+    laneList.onSetMode = [this] (int index, chops::PlayMode mode)
+    {
+        applyEdit ([index, mode] (chops::Document& d)
+                   { return chops::edits::setSectionMode (d, index, mode); });
+    };
+    laneList.onSetReverse = [this] (int index, bool reverse)
+    {
+        applyEdit ([index, reverse] (chops::Document& d)
+                   { return chops::edits::setSectionReverse (d, index, reverse); });
+    };
+    laneList.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
 
     sliceEqualButton.onClick = [this]
     {
@@ -97,6 +127,7 @@ void ChopsEditor::refreshFromModel()
     }
 
     waveDisplay.setDocument (doc, &peaks);
+    laneList.setDocument (doc, &peaks, laneViewport.getMaximumVisibleWidth());
     padStrip.setDocument (doc);
     repaint();
 }
@@ -111,6 +142,7 @@ void ChopsEditor::timerCallback()
     const auto section = chopsProcessor.engine().uiSectionIndex.load (std::memory_order_relaxed);
     const auto frame = chopsProcessor.engine().uiPositionFrames.load (std::memory_order_relaxed);
     waveDisplay.setPlayhead (section, frame);
+    laneList.setPlayhead (section, frame);
     padStrip.setActiveSection (section);
 }
 
@@ -131,9 +163,13 @@ void ChopsEditor::resized()
     auto info = bounds.removeFromBottom (22);
     juce::ignoreUnused (info);
 
-    padStrip.setBounds (bounds.removeFromBottom (84));
+    padStrip.setBounds (bounds.removeFromBottom (56));
     bounds.removeFromBottom (8);
-    waveDisplay.setBounds (bounds);
+
+    waveDisplay.setBounds (bounds.removeFromTop (juce::jmax (120, bounds.getHeight() * 2 / 5)));
+    bounds.removeFromTop (8);
+    laneViewport.setBounds (bounds);
+    laneList.setDocument (doc, &peaks, laneViewport.getMaximumVisibleWidth());
 }
 
 void ChopsEditor::paint (juce::Graphics& g)
@@ -150,8 +186,8 @@ void ChopsEditor::paint (juce::Graphics& g)
         g.drawText (juce::File (smp.originalPath).getFileName()
                         + "   " + juce::String (smp.sourceSampleRate / 1000.0, 1) + " kHz"
                         + "   " + juce::String (doc->sections.size()) + " slice(s)"
-                        + "   click wave: add slice · drag handle: move · double-click handle: remove"
-                        + " · wheel: zoom",
+                        + "   wave: click adds slice, wheel zooms · lane: drag selects loop,"
+                        + " edges trim, double-click clears loop",
                     info, juce::Justification::centredLeft);
     }
     else

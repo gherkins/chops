@@ -1,5 +1,7 @@
 #include "WaveDisplay.h"
 
+#include "WaveRender.h"
+
 namespace chops
 {
 
@@ -105,10 +107,7 @@ void WaveDisplay::paint (juce::Graphics& g)
 
     const auto& buffer = doc->sample->buffer;
     const auto bounds = getLocalBounds().toFloat();
-    const float midY = bounds.getCentreY();
-    const float halfHeight = bounds.getHeight() * 0.46f;
     const int width = getWidth();
-    const double framesPerPixel = viewLength / (double) width;
 
     // Playing section highlight: the main display always shows where the
     // currently played slice lives.
@@ -124,45 +123,7 @@ void WaveDisplay::paint (juce::Graphics& g)
         }
     }
 
-    g.setColour (kWave);
-
-    if (framesPerPixel < 2.0)
-    {
-        // Zoomed to (near) sample level: draw the actual samples as a path.
-        juce::Path path;
-        const float* data = buffer.getReadPointer (0);
-        const auto total = (juce::int64) buffer.getNumSamples();
-        bool started = false;
-
-        for (auto f = std::max ((juce::int64) 0, (juce::int64) viewStart - 1);
-             f <= std::min (total - 1, (juce::int64) (viewStart + viewLength) + 1); ++f)
-        {
-            const auto x = (float) frameToX ((double) f);
-            const auto y = midY - data[f] * halfHeight;
-            if (! started)
-            {
-                path.startNewSubPath (x, y);
-                started = true;
-            }
-            else
-            {
-                path.lineTo (x, y);
-            }
-        }
-
-        g.strokePath (path, juce::PathStrokeType (1.5f));
-    }
-    else
-    {
-        for (int x = 0; x < width; ++x)
-        {
-            float lo, hi;
-            peaks->query (buffer, xToFrame ((double) x), xToFrame ((double) x + 1.0), lo, hi);
-            const float top = midY - hi * halfHeight;
-            const float bottom = midY - lo * halfHeight;
-            g.fillRect ((float) x, top, 1.0f, std::max (bottom - top, 1.0f));
-        }
-    }
+    render::drawWave (g, bounds, buffer, *peaks, viewStart, viewLength, kWave);
 
     // Slice markers with grab handles.
     for (int i = 1; i < (int) doc->sections.size(); ++i)

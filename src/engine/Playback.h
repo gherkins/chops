@@ -38,7 +38,9 @@ struct VoiceParams
     bool reverse = false;
     double rate = 1.0;             // resolved playback rate (pitch * srcRate/hostRate)
     float gain = 1.0f;
-    int xfadeFrames = 0;           // loop crossfade (M3)
+    int xfadeFrames = 0;           // loop crossfade
+
+    bool hasLoop() const noexcept { return loopStart >= 0 && loopEnd > loopStart; }
 };
 
 } // namespace chops

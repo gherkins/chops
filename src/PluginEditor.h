@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/PadStrip.h"
 #include "ui/PeakCache.h"
+#include "ui/SliceLane.h"
 #include "ui/WaveDisplay.h"
 
 class ChopsEditor : public juce::AudioProcessorEditor,
@@ -34,6 +35,8 @@ private:
     std::shared_ptr<const chops::SampleData> peaksBuiltFor;
 
     chops::WaveDisplay waveDisplay;
+    chops::SliceLaneList laneList;
+    juce::Viewport laneViewport;
     chops::PadStrip padStrip;
     juce::TextButton sliceEqualButton { "slice =" };
     juce::ComboBox sliceCountBox;

@@ -32,4 +32,15 @@ void autoSliceEqual (Document& doc, int parts);
 // Energy-flux onset detection; sensitivity 0..1 (higher = more slices).
 void autoSliceTransients (Document& doc, float sensitivity);
 
+// --- per-lane edits (free moves: no partition linking, notes stay stable,
+// sections may overlap — that's the point) ---
+
+constexpr juce::int64 kMinLoopFrames = 32;
+
+bool setSectionRange (Document& doc, int index, juce::int64 newStart, juce::int64 newEnd);
+bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int64 loopEnd);
+bool clearSectionLoop (Document& doc, int index);
+bool setSectionMode (Document& doc, int index, PlayMode mode);
+bool setSectionReverse (Document& doc, int index, bool reverse);
+
 } // namespace chops::edits

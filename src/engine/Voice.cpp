@@ -37,6 +37,7 @@ void Voice::start (const SampleView& sample, const VoiceParams& params,
     // Reverse starts on the last frame inside the section.
     phase = params_.reverse ? (double) (params_.end - 1) : (double) params_.start;
     increment = params_.rate;
+    held = true;
     state = State::Playing;
 }
 
@@ -50,8 +51,13 @@ void Voice::noteOff() noexcept
         case PlayMode::OneShot:
             break;
 
+        case PlayMode::LoopRun:
+            // Stop wrapping: the pass in flight becomes the final loop pass,
+            // then playback runs on through the rest of the section.
+            held = false;
+            break;
+
         case PlayMode::Gate:
-        case PlayMode::LoopRun:   // LoopRun release behaviour lands in M3; gate for now
             state = State::Releasing;
             rampStep = (float) (1.0 / (kReleaseSeconds * outputRate_));
             break;
@@ -90,6 +96,40 @@ float Voice::readInterpolated (const float* channel, double pos) const noexcept
                    + (3.0f * (p1 - p2) + p3 - p0) * t * t * t);
 }
 
+float Voice::readLooped (const float* channel, double pos, bool looping) const noexcept
+{
+    float value = readInterpolated (channel, pos);
+
+    // Loop crossfade: approaching the wrap point, blend in the material from
+    // one loop-length away so the wrap itself is seamless.
+    if (looping && params_.xfadeFrames > 0)
+    {
+        const auto loopLength = (double) (params_.loopEnd - params_.loopStart);
+        const auto xfade = (double) params_.xfadeFrames;
+
+        if (! params_.reverse)
+        {
+            const double toWrap = (double) params_.loopEnd - pos;
+            if (toWrap < xfade && pos >= (double) params_.loopStart)
+            {
+                const float w = (float) (toWrap / xfade);
+                value = value * w + readInterpolated (channel, pos - loopLength) * (1.0f - w);
+            }
+        }
+        else
+        {
+            const double toWrap = pos - (double) params_.loopStart;
+            if (toWrap < xfade && pos <= (double) params_.loopEnd)
+            {
+                const float w = (float) (toWrap / xfade);
+                value = value * w + readInterpolated (channel, pos + loopLength) * (1.0f - w);
+            }
+        }
+    }
+
+    return value;
+}
+
 void Voice::render (float* outL, float* outR, int numFrames) noexcept
 {
     if (state == State::Idle || numFrames <= 0)
@@ -100,8 +140,23 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
     const bool stereoOut = outR != nullptr;
     const bool stereoSrc = srcR != srcL;
 
+    const bool canLoop = params_.mode == PlayMode::LoopRun && params_.hasLoop();
+    const auto loopLength = canLoop ? (double) (params_.loopEnd - params_.loopStart) : 0.0;
+
     for (int i = 0; i < numFrames; ++i)
     {
+        const bool looping = canLoop && held;
+
+        if (looping)
+        {
+            if (! params_.reverse)
+                while (phase >= (double) params_.loopEnd)
+                    phase -= loopLength;
+            else
+                while (phase < (double) params_.loopStart)
+                    phase += loopLength;
+        }
+
         if (params_.reverse ? (phase < (double) params_.start)
                             : (phase >= (double) params_.end))
         {
@@ -128,16 +183,16 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
             gain *= rampGain;
         }
 
-        const float l = readInterpolated (srcL, phase);
+        const float l = readLooped (srcL, phase, looping);
 
         if (stereoOut)
         {
             outL[i] += l * gain;
-            outR[i] += (stereoSrc ? readInterpolated (srcR, phase) : l) * gain;
+            outR[i] += (stereoSrc ? readLooped (srcR, phase, looping) : l) * gain;
         }
         else
         {
-            outL[i] += (stereoSrc ? 0.5f * (l + readInterpolated (srcR, phase)) : l) * gain;
+            outL[i] += (stereoSrc ? 0.5f * (l + readLooped (srcR, phase, looping)) : l) * gain;
         }
 
         phase += params_.reverse ? -increment : increment;

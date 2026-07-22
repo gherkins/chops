@@ -254,6 +254,155 @@ int main()
             EXPECT (std::abs (d.sections[(size_t) hit].start - (juce::int64) hit * 11025) <= 512);
     }
 
+    // --- LoopRun state machine on an identity ramp (sample[i] == i) ---
+    // Catmull-Rom has linear precision and rate is 1, so every output frame
+    // equals its expected source phase exactly.
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::LoopRun;
+        EXPECT (chops::edits::setSectionLoop (d, 0, 1000, 2000));
+
+        chops::Engine loopEngine;
+        loopEngine.prepare (kRate, 512);
+        loopEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        constexpr int kBlock = 512;
+        constexpr int kNoteOffAt = 4096;
+        std::vector<float> rendered;
+        juce::AudioBuffer<float> block (1, kBlock);
+
+        for (int blockStart = 0; blockStart < 8192; blockStart += kBlock)
+        {
+            block.clear();
+            juce::MidiBuffer midi;
+            if (blockStart == 0)
+                addNoteOn (midi, 36, 0);
+            if (blockStart == kNoteOffAt)
+                addNoteOff (midi, 36, 0);
+            loopEngine.process (block, midi);
+            rendered.insert (rendered.end(), block.getReadPointer (0),
+                             block.getReadPointer (0) + kBlock);
+        }
+
+        // Held: phase runs to the loop end, then wraps inside [1000, 2000).
+        auto heldPhase = [] (int f) { return f < 2000 ? f : 1000 + (f - 1000) % 1000; };
+        EXPECT (rendered[500] == (float) heldPhase (500));
+        EXPECT (rendered[1999] == (float) heldPhase (1999));
+        EXPECT (rendered[2000] == 1000.0f);   // first wrap
+        EXPECT (rendered[2500] == 1500.0f);
+        EXPECT (rendered[3999] == 1999.0f);
+
+        // Released at 4096 with phase 1096: the pass in flight finishes and
+        // playback runs straight through the loop end into the rest.
+        const int phaseAtRelease = heldPhase (kNoteOffAt);
+        EXPECT (phaseAtRelease == 1096);
+        EXPECT (rendered[4500] == (float) (phaseAtRelease + (4500 - kNoteOffAt)));
+        EXPECT (rendered[5100] == 2100.0f);   // past loopEnd: no wrap after release
+        EXPECT (rendered[7000] == 4000.0f);   // deep into the tail
+    }
+
+    // --- loop crossfade blends toward the pre-loop material near the wrap ---
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::LoopRun;
+        EXPECT (chops::edits::setSectionLoop (d, 0, 1000, 2000));
+        d.sections[0].xfadeFrames = 64;
+
+        chops::Engine xfEngine;
+        xfEngine.prepare (kRate, 512);
+        xfEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        std::vector<float> rendered;
+        juce::AudioBuffer<float> block (1, 512);
+        for (int blockStart = 0; blockStart < 2560; blockStart += 512)
+        {
+            block.clear();
+            juce::MidiBuffer midi;
+            if (blockStart == 0)
+                addNoteOn (midi, 36, 0);
+            xfEngine.process (block, midi);
+            rendered.insert (rendered.end(), block.getReadPointer (0),
+                             block.getReadPointer (0) + 512);
+        }
+
+        const int f = 1990;   // inside the 64-frame crossfade zone before 2000
+        const float w = (float) (2000 - f) / 64.0f;
+        const float expected = (float) f * w + (float) (f - 1000) * (1.0f - w);
+        EXPECT (std::abs (rendered[(size_t) f] - expected) < 0.01f);
+        EXPECT (std::abs (rendered[1900] - 1900.0f) < 1.0e-6f);   // outside the zone: untouched
+    }
+
+    // --- reverse playback ---
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::OneShot;
+        EXPECT (chops::edits::setSectionReverse (d, 0, true));
+
+        chops::Engine revEngine;
+        revEngine.prepare (kRate, 512);
+        revEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (1, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        revEngine.process (block, midi);
+        EXPECT (block.getSample (0, 100) == (float) (kFrames - 1 - 100));
+    }
+
+    // --- lane edits: free ranges (overlap allowed), loop set/clear ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+
+        // Free range move: section 0 now reaches deep into section 1 (overlap),
+        // and no notes are remapped by range edits.
+        EXPECT (chops::edits::setSectionRange (d, 0, 100, 30000));
+        EXPECT (d.sections[0].start == 100 && d.sections[0].end == 30000);
+        EXPECT (d.sections[1].start == 20000);   // neighbour untouched
+        EXPECT (d.sections[0].midiNote == 36 && d.sections[1].midiNote == 37);
+
+        EXPECT (! chops::edits::setSectionRange (d, 0, 100, 150));   // below minimum
+        EXPECT (chops::edits::setSectionLoop (d, 0, 5000, 9000));
+        EXPECT (d.sections[0].loopStart == 5000 && d.sections[0].loopEnd == 9000);
+        EXPECT (chops::edits::setSectionLoop (d, 0, 50, 9000));      // clamps into section
+        EXPECT (d.sections[0].loopStart == 100);
+        EXPECT (! chops::edits::setSectionLoop (d, 0, 5000, 5010));  // too short
+        EXPECT (chops::edits::clearSectionLoop (d, 0));
+        EXPECT (! d.sections[0].hasLoop());
+
+        // Shrinking the range drops a loop that no longer fits.
+        EXPECT (chops::edits::setSectionLoop (d, 0, 25000, 29000));
+        EXPECT (chops::edits::setSectionRange (d, 0, 100, 20000));
+        EXPECT (! d.sections[0].hasLoop());
+    }
+
     wavFile.deleteFile();
 
     if (failures == 0)
