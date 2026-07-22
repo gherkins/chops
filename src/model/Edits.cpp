@@ -84,23 +84,29 @@ bool splitAt (Document& doc, juce::int64 frame)
 
 bool moveSectionStart (Document& doc, int index, juce::int64 newStart)
 {
-    if (index < 1 || index >= (int) doc.sections.size())
+    if (index < 0 || index >= (int) doc.sections.size())
         return false;
 
     auto& sec = doc.sections[(size_t) index];
-    auto& prev = doc.sections[(size_t) index - 1];
 
-    const auto lo = prev.start + kMinSectionFrames;
+    // The first section's marker is a free head trim; every later marker is
+    // a partition boundary shared with the previous section.
+    const auto lo = index > 0 ? doc.sections[(size_t) index - 1].start + kMinSectionFrames
+                              : (juce::int64) 0;
     const auto hi = sec.end - kMinSectionFrames;
     if (lo > hi)
         return false;
 
     newStart = std::clamp (newStart, lo, hi);
 
-    // Markers define partition boundaries: dragging one always moves the
-    // shared edge, healing any gap or overlap left by older states.
-    prev.end = newStart;
-    sanitizeLoop (prev);
+    if (index > 0)
+    {
+        // Dragging a boundary always moves the shared edge, healing any gap
+        // or overlap left by older states.
+        auto& prev = doc.sections[(size_t) index - 1];
+        prev.end = newStart;
+        sanitizeLoop (prev);
+    }
 
     sec.start = newStart;
     sanitizeLoop (sec);

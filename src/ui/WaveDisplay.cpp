@@ -79,7 +79,7 @@ int WaveDisplay::hitMarker (juce::Point<int> pos) const
     int best = -1;
     double bestDistance = kHandleHitPx + 1.0;
 
-    for (int i = 1; i < (int) doc->sections.size(); ++i)
+    for (int i = 0; i < (int) doc->sections.size(); ++i)
     {
         const auto x = frameToX ((double) doc->sections[(size_t) i].start);
         const auto distance = std::abs (x - (double) pos.x);
@@ -127,8 +127,8 @@ void WaveDisplay::paint (juce::Graphics& g)
 
     render::drawWave (g, bounds, buffer, *peaks, viewStart, viewLength, kWave);
 
-    // Slice markers with grab handles.
-    for (int i = 1; i < (int) doc->sections.size(); ++i)
+    // Slice markers with grab handles; marker 0 doubles as the head trim.
+    for (int i = 0; i < (int) doc->sections.size(); ++i)
     {
         const auto x = (float) frameToX ((double) doc->sections[(size_t) i].start);
         if (x < -kHandleHitPx || x > (float) width + kHandleHitPx)

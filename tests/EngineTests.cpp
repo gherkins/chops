@@ -653,6 +653,29 @@ int main (int argc, char* argv[])
         EXPECT (chops::edits::setSectionMode (d, 0, chops::PlayMode::LoopRun));   // loop exists
     }
 
+    // --- head trim: the single whole-file slice has an adjustable start ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+
+        EXPECT (chops::edits::moveSectionStart (d, 0, 5000));
+        EXPECT (d.sections[0].start == 5000 && d.sections[0].end == kFrames);
+        EXPECT (d.sections[0].midiNote == 36);
+
+        EXPECT (chops::edits::moveSectionStart (d, 0, -100));   // clamps to 0
+        EXPECT (d.sections[0].start == 0);
+        EXPECT (chops::edits::moveSectionStart (d, 0, kFrames));   // clamps below end
+        EXPECT (d.sections[0].start == kFrames - chops::edits::kMinSectionFrames);
+
+        // With slices, marker 0 trims the head without touching neighbours.
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (chops::edits::moveSectionStart (d, 0, 3000));
+        EXPECT (d.sections[0].start == 3000 && d.sections[0].end == 20000);
+        EXPECT (d.sections[1].start == 20000);
+    }
+
     // --- polyphony UI snapshots: every playing voice is published ---
     {
         chops::Document d;

@@ -45,7 +45,13 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     };
     waveDisplay.onRemove = [this] (int index)
     {
-        applyEdit ([index] (chops::Document& d) { return chops::edits::removeSection (d, index); });
+        applyEdit ([index] (chops::Document& d)
+        {
+            // Marker 0 is the head trim: double-click resets it to the start.
+            if (index == 0)
+                return chops::edits::moveSectionStart (d, 0, 0);
+            return chops::edits::removeSection (d, index);
+        });
     };
     // Pads trigger AND select which slice the lane editor shows.
     padStrip.onPad = [this] (int sectionIndex, bool on)
