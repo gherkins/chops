@@ -155,16 +155,23 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
         lastDoc = doc;
     }
 
-    // Live DSP: refresh every running voice's FX from the current document,
-    // so parameter tweaks land on sustaining loops, not just new notes.
+    // Live tuning: refresh every running voice's FX and loop region from the
+    // current document, so parameter and loop-point tweaks land on sustaining
+    // notes, not just new ones.
     if (doc != nullptr && doc->sample != nullptr)
     {
         const void* currentId = makeSampleView (*doc->sample).channels;
         for (auto& v : voices)
+        {
             if (v.isActive() && v.sampleId() == currentId
                 && v.sectionIndex() >= 0 && v.sectionIndex() < (int) doc->sections.size())
-                v.updateFx (resolveFx (doc->sections[(size_t) v.sectionIndex()], doc->global,
+            {
+                const auto& sec = doc->sections[(size_t) v.sectionIndex()];
+                v.updateFx (resolveFx (sec, doc->global,
                                        doc->sample->sourceSampleRate, hostRate));
+                v.updateLoop (sec.loopStart, sec.loopEnd, sec.xfadeFrames);
+            }
+        }
     }
 
     const int total = buffer.getNumSamples();

@@ -19,7 +19,8 @@ public:
     static constexpr int kHeaderWidth = 196;
 
     // All callbacks receive the section index this lane is bound to.
-    std::function<void (int, juce::int64, juce::int64)> onSetRange;
+    // Section boundaries are edited in the main waveform only; the lane owns
+    // the loop region and per-slice settings.
     std::function<void (int, juce::int64, juce::int64)> onSetLoop;
     std::function<void (int)> onClearLoop;
     std::function<void (int, PlayMode)> onSetMode;
@@ -49,7 +50,7 @@ public:
     void mouseMove (const juce::MouseEvent&) override;
 
 private:
-    enum class Drag { None, SelectLoop, LoopStart, LoopEnd, SecStart, SecEnd };
+    enum class Drag { None, SelectLoop, LoopStart, LoopEnd };
 
     const Section* section() const;
     juce::Rectangle<int> waveBounds() const;

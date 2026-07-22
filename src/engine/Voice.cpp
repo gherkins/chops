@@ -52,6 +52,13 @@ void Voice::updateFx (const VoiceFx& fx) noexcept
     increment = fx.rate;
 }
 
+void Voice::updateLoop (std::int64_t loopStart, std::int64_t loopEnd, int xfadeFrames) noexcept
+{
+    params_.loopStart = loopStart;
+    params_.loopEnd = loopEnd;
+    params_.xfadeFrames = xfadeFrames;
+}
+
 void Voice::noteOff() noexcept
 {
     if (state != State::Playing)
@@ -165,14 +172,22 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
     {
         const bool looping = canLoop && held;
 
+        // fmod, not a subtraction loop: live loop edits can leave the phase
+        // arbitrarily far outside the region, and re-entry must stay O(1).
         if (looping)
         {
             if (! params_.reverse)
-                while (phase >= (double) params_.loopEnd)
-                    phase -= loopLength;
+            {
+                if (phase >= (double) params_.loopEnd)
+                    phase = (double) params_.loopStart
+                            + std::fmod (phase - (double) params_.loopStart, loopLength);
+            }
             else
-                while (phase < (double) params_.loopStart)
-                    phase += loopLength;
+            {
+                if (phase < (double) params_.loopStart)
+                    phase = (double) params_.loopEnd
+                            - std::fmod ((double) params_.loopEnd - phase, loopLength);
+            }
         }
 
         if (params_.reverse ? (phase < (double) params_.start)

@@ -9,10 +9,8 @@ namespace chops
 
 static const juce::Colour kPanel { 0xff22242a };
 static const juce::Colour kHeaderBg { 0xff1c1e24 };
-static const juce::Colour kWaveDim { 0xff3a5c50 };
 static const juce::Colour kWave { 0xff5ec8a8 };
 static const juce::Colour kLoop { 0xff7ab8ff };
-static const juce::Colour kEdge { 0xffd9a05a };
 
 SliceLane::SliceLane()
 {
@@ -99,23 +97,10 @@ void SliceLane::updateView()
     if (sec == nullptr || doc->sample == nullptr)
         return;
 
-    // Keep the current view if the section still fits comfortably inside it;
-    // otherwise re-frame with ~8% context on both sides. Stable view while
-    // dragging edges = no visual jumps mid-gesture.
-    const auto total = (double) doc->sample->numFrames();
-    const auto secStart = (double) sec->start;
-    const auto secEnd = (double) sec->end;
-    const auto pad = std::max (64.0, (secEnd - secStart) * 0.08);
-
-    const bool fits = drag != Drag::None
-                      && viewLength > 0.0
-                      && secStart >= viewStart
-                      && secEnd <= viewStart + viewLength;
-    if (fits)
-        return;
-
-    viewStart = std::max (0.0, secStart - pad);
-    viewLength = std::min (total, secEnd + pad) - viewStart;
+    // The slice waveform is exactly the section: no context padding, the
+    // slice fills the lane edge to edge.
+    viewStart = (double) sec->start;
+    viewLength = (double) (sec->end - sec->start);
 }
 
 void SliceLane::setPlayhead (bool activeNow, double frame)
@@ -205,19 +190,7 @@ void SliceLane::paint (juce::Graphics& g)
     const auto area = waveBounds().toFloat();
     const auto& buffer = doc->sample->buffer;
 
-    // Context wave (dim), then the section range on top (bright).
-    render::drawWave (g, area, buffer, *peaks, viewStart, viewLength, kWaveDim);
-
-    const auto startX = (float) frameToX ((double) sec->start);
-    const auto endX = (float) frameToX ((double) sec->end);
-
-    {
-        juce::Graphics::ScopedSaveState clip (g);
-        g.reduceClipRegion (juce::Rectangle<float> (startX, area.getY(),
-                                                    endX - startX, area.getHeight())
-                                .toNearestInt());
-        render::drawWave (g, area, buffer, *peaks, viewStart, viewLength, kWave);
-    }
+    render::drawWave (g, area, buffer, *peaks, viewStart, viewLength, kWave);
 
     // Loop region overlay.
     if (sec->hasLoop())
@@ -230,11 +203,6 @@ void SliceLane::paint (juce::Graphics& g)
         g.fillRect (loopX1 - 0.75f, area.getY(), 1.5f, area.getHeight());
         g.fillRect (loopX2 - 0.75f, area.getY(), 1.5f, area.getHeight());
     }
-
-    // Section start/end handles.
-    g.setColour (kEdge);
-    g.fillRect (startX - 1.0f, area.getY(), 2.0f, area.getHeight());
-    g.fillRect (endX - 1.0f, area.getY(), 2.0f, area.getHeight());
 
     if (active && playFrame >= 0.0)
     {
@@ -264,14 +232,11 @@ SliceLane::Drag SliceLane::hitAt (juce::Point<int> pos) const
         return std::abs (frameToX ((double) frame) - (double) pos.x) <= kEdgeHitPx;
     };
 
-    // Loop edges win over section edges; selection is the fallback.
     if (sec->hasLoop())
     {
         if (near (sec->loopStart)) return Drag::LoopStart;
         if (near (sec->loopEnd)) return Drag::LoopEnd;
     }
-    if (near (sec->start)) return Drag::SecStart;
-    if (near (sec->end)) return Drag::SecEnd;
     return Drag::SelectLoop;
 }
 
@@ -321,16 +286,6 @@ void SliceLane::mouseDrag (const juce::MouseEvent& e)
                 onSetLoop (index, sec->loopStart, frame);
             break;
 
-        case Drag::SecStart:
-            if (onSetRange)
-                onSetRange (index, frame, sec->end);
-            break;
-
-        case Drag::SecEnd:
-            if (onSetRange)
-                onSetRange (index, sec->start, frame);
-            break;
-
         case Drag::None:
             break;
     }
@@ -368,8 +323,6 @@ void SliceLane::mouseMove (const juce::MouseEvent& e)
     {
         case Drag::LoopStart:
         case Drag::LoopEnd:
-        case Drag::SecStart:
-        case Drag::SecEnd:
             setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
             break;
         case Drag::SelectLoop:

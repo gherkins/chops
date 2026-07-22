@@ -58,11 +58,6 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         }
     };
 
-    sliceLane.onSetRange = [this] (int index, juce::int64 s, juce::int64 e)
-    {
-        applyEdit ([index, s, e] (chops::Document& d)
-                   { return chops::edits::setSectionRange (d, index, s, e); });
-    };
     sliceLane.onSetLoop = [this] (int index, juce::int64 s, juce::int64 e)
     {
         applyEdit ([index, s, e] (chops::Document& d)
@@ -286,8 +281,8 @@ void ChopsEditor::paint (juce::Graphics& g)
         g.drawText (juce::File (smp.originalPath).getFileName()
                         + "   " + juce::String (smp.sourceSampleRate / 1000.0, 1) + " kHz"
                         + "   " + juce::String (doc->sections.size()) + " slice(s)"
-                        + "   wave: click adds slice, wheel zooms · lane: drag selects loop,"
-                        + " edges trim, double-click clears loop",
+                        + "   wave: click adds slice, drag handles, wheel zooms · lane: drag"
+                        + " selects loop, loop edges adjust, double-click clears",
                     info, juce::Justification::centredLeft);
     }
     else

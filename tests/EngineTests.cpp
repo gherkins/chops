@@ -453,6 +453,65 @@ int main (int argc, char* argv[])
         EXPECT (std::abs (rendered[1900] - 1900.0f) < 1.0e-6f);   // outside the zone: untouched
     }
 
+    // --- live loop tuning: loop edits land on the sounding note ---
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::LoopRun;
+        EXPECT (chops::edits::setSectionLoop (d, 0, 1000, 2000));
+
+        chops::Engine liveEngine;
+        liveEngine.prepare (kRate, 512);
+        liveEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        std::vector<float> rendered;
+        juce::AudioBuffer<float> block (1, 512);
+        const auto renderBlocks = [&] (int count, juce::MidiBuffer midi)
+        {
+            for (int b = 0; b < count; ++b)
+            {
+                block.clear();
+                liveEngine.process (block, midi);
+                midi.clear();
+                rendered.insert (rendered.end(), block.getReadPointer (0),
+                                 block.getReadPointer (0) + 512);
+            }
+        };
+
+        juce::MidiBuffer noteOn;
+        addNoteOn (noteOn, 36, 0);
+        renderBlocks (1, noteOn);   // frames 0..511, still before the loop
+
+        // Move the loop ahead of the phase while the note is held: playback
+        // runs on and loops in the NEW region.
+        chops::Document d2 (d);
+        EXPECT (chops::edits::setSectionLoop (d2, 0, 3000, 3500));
+        liveEngine.publishDocument (std::make_unique<const chops::Document> (d2));
+        renderBlocks (9, {});       // through frame 5119
+
+        EXPECT (rendered[4000] == 3000.0f);   // 3000 + (4000-3000) % 500
+        EXPECT (rendered[4600] == 3100.0f);
+
+        // Shrink the loop far below the current phase: O(1) fmod re-entry on
+        // the next wrap check, then steady wrapping with the new period.
+        chops::Document d3 (d2);
+        EXPECT (chops::edits::setSectionLoop (d3, 0, 1000, 1200));
+        liveEngine.publishDocument (std::make_unique<const chops::Document> (d3));
+        renderBlocks (1, {});       // frames 5120..5631
+
+        // Phase was 3120 entering the block: 1000 + (3120-1000) % 200 = 1120.
+        EXPECT (rendered[5120] == 1120.0f);
+        EXPECT (rendered[5150] == 1150.0f);
+        EXPECT (rendered[5350] == 1150.0f);   // one 200-frame period later
+    }
+
     // --- reverse playback ---
     {
         auto ramp = std::make_shared<chops::SampleData>();

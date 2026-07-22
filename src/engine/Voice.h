@@ -22,6 +22,11 @@ public:
     // Live per-block DSP refresh: rate/decimation/drive jump, gain is smoothed.
     void updateFx (const VoiceFx& fx) noexcept;
 
+    // Live per-block loop-region refresh, so dragging loop points tunes the
+    // sounding note. Out-of-range phases re-enter the new region on the next
+    // wrap check.
+    void updateLoop (std::int64_t loopStart, std::int64_t loopEnd, int xfadeFrames) noexcept;
+
     void render (float* outL, float* outR, int numFrames) noexcept;
 
     bool isActive() const noexcept          { return state != State::Idle; }

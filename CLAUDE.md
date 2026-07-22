@@ -69,10 +69,12 @@ republishing.
 - **Engine** (`src/engine/Engine.cpp`): 32 preallocated voices; sample-accurate
   MIDI by splitting each block at event offsets (raw status-byte parsing — no
   `MidiMessage` allocation on the audio thread); mono-per-section retrigger
-  steal with fast fade. Every block, `resolveFx` re-resolves each running
-  voice's DSP from the *current* document (section override falls back to
-  global: `srOverride 0` / `driveOverride < 0` mean "follow global") — this is
-  what makes FX tweaks land live on sustaining loops.
+  steal with fast fade. Every block, each running voice's DSP (`resolveFx`:
+  section override falls back to global; `srOverride 0` / `driveOverride < 0`
+  mean "follow global") AND its loop region are re-resolved from the *current*
+  document — this is what makes FX tweaks and loop-point drags land live on
+  sustaining notes. Loop wrap uses fmod, not repeated subtraction, so a live
+  edit that strands the phase far outside the region re-enters in O(1).
 - **Voice** (`src/engine/Voice.cpp`, JUCE-free via `Playback.h`): Catmull-Rom
   interpolated read → sample-and-hold decimator (deliberately no
   anti-aliasing) → `tanh(g*x)/tanh(g)` waveshaper → smoothed gain. LoopRun
@@ -90,9 +92,11 @@ republishing.
   (`ChangeBroadcaster`) and pulls model snapshots; a 30 Hz timer reads the
   engine's playhead atomics. Always exactly two waveforms on screen: the main
   `WaveDisplay` (markers: click adds, drag moves linked boundaries,
-  double-click removes, wheel zooms) and ONE `SliceLane` bound to the selected
-  slice — first by default, then last-triggered (pads and MIDI select; never
-  switches during an active gesture). Waveform painting goes through
+  double-click removes, wheel zooms — the ONLY place section boundaries are
+  edited) and ONE `SliceLane` bound to the selected slice — first by default,
+  then last-triggered (pads and MIDI select; never switches during an active
+  gesture). The lane shows exactly the section range, no context padding, and
+  owns only the loop region and per-slice settings. Waveform painting goes through
   `PeakCache` (mip-mapped min/max) + shared `render::drawWave`, which flips to
   a sample-level path when zoomed past ~2 frames/pixel.
 - **Tests** (`tests/EngineTests.cpp`): bit-exact philosophy — identity-ramp
