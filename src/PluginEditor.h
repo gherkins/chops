@@ -28,6 +28,7 @@ private:
     void timerCallback() override;
     void applyEdit (const std::function<bool (chops::Document&)>& edit);
     void refreshFromModel();
+    void selectSection (int sectionIndex);
 
     ChopsProcessor& chopsProcessor;
     std::shared_ptr<const chops::Document> doc;
@@ -35,9 +36,9 @@ private:
     std::shared_ptr<const chops::SampleData> peaksBuiltFor;
 
     chops::WaveDisplay waveDisplay;
-    chops::SliceLaneList laneList;
-    juce::Viewport laneViewport;
+    chops::SliceLane sliceLane;      // single lane: shows the selected slice
     chops::PadStrip padStrip;
+    int selectedSection = -1;        // first slice by default, then last triggered
     juce::TextButton sliceEqualButton { "slice =" };
     juce::ComboBox sliceCountBox;
     juce::TextButton transientButton { "transients" };

@@ -34,6 +34,12 @@ public:
     void bind (int sectionIndex, std::shared_ptr<const Document> doc, const PeakCache* peaks);
     void setPlayhead (bool activeNow, double frame);
 
+    int boundIndex() const noexcept { return index; }
+
+    // True while a gesture is in flight; the editor must not rebind the lane
+    // to another slice mid-drag.
+    bool isGestureActive() const noexcept { return drag != Drag::None || padPressed; }
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -68,29 +74,6 @@ private:
     juce::Slider pitchKnob, fineKnob, srKnob, driveKnob;
 
     static constexpr int kEdgeHitPx = 6;
-};
-
-// Vertical stack of lanes, lives inside a Viewport.
-class SliceLaneList : public juce::Component
-{
-public:
-    // Shared callback set, forwarded to every lane.
-    std::function<void (int, juce::int64, juce::int64)> onSetRange;
-    std::function<void (int, juce::int64, juce::int64)> onSetLoop;
-    std::function<void (int)> onClearLoop;
-    std::function<void (int, PlayMode)> onSetMode;
-    std::function<void (int, bool)> onSetReverse;
-    std::function<void (int, int, float)> onSetPitch;
-    std::function<void (int, double)> onSetSr;
-    std::function<void (int, float)> onSetDrive;
-    std::function<void (int midiNote, bool on)> onPad;
-
-    void setDocument (std::shared_ptr<const Document> doc, const PeakCache* peaks, int width);
-    void setPlayhead (int activeSection, double frame);
-    void resized() override;
-
-private:
-    std::vector<std::unique_ptr<SliceLane>> lanes;
 };
 
 } // namespace chops

@@ -23,9 +23,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     setResizeLimits (600, 400, 4096, 4096);
 
     addAndMakeVisible (waveDisplay);
-    addAndMakeVisible (laneViewport);
-    laneViewport.setViewedComponent (&laneList, false);
-    laneViewport.setScrollBarsShown (true, false);
+    addAndMakeVisible (sliceLane);
     addAndMakeVisible (padStrip);
     addAndMakeVisible (sliceEqualButton);
     addAndMakeVisible (sliceCountBox);
@@ -49,49 +47,58 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     {
         applyEdit ([index] (chops::Document& d) { return chops::edits::removeSection (d, index); });
     };
-    padStrip.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
+    // Pads trigger AND select which slice the lane editor shows.
+    padStrip.onPad = [this] (int sectionIndex, bool on)
+    {
+        if (doc != nullptr && sectionIndex >= 0 && sectionIndex < (int) doc->sections.size())
+        {
+            if (on)
+                selectSection (sectionIndex);
+            chopsProcessor.triggerPad (doc->sections[(size_t) sectionIndex].midiNote, on);
+        }
+    };
 
-    laneList.onSetRange = [this] (int index, juce::int64 s, juce::int64 e)
+    sliceLane.onSetRange = [this] (int index, juce::int64 s, juce::int64 e)
     {
         applyEdit ([index, s, e] (chops::Document& d)
                    { return chops::edits::setSectionRange (d, index, s, e); });
     };
-    laneList.onSetLoop = [this] (int index, juce::int64 s, juce::int64 e)
+    sliceLane.onSetLoop = [this] (int index, juce::int64 s, juce::int64 e)
     {
         applyEdit ([index, s, e] (chops::Document& d)
                    { return chops::edits::setSectionLoop (d, index, s, e); });
     };
-    laneList.onClearLoop = [this] (int index)
+    sliceLane.onClearLoop = [this] (int index)
     {
         applyEdit ([index] (chops::Document& d)
                    { return chops::edits::clearSectionLoop (d, index); });
     };
-    laneList.onSetMode = [this] (int index, chops::PlayMode mode)
+    sliceLane.onSetMode = [this] (int index, chops::PlayMode mode)
     {
         applyEdit ([index, mode] (chops::Document& d)
                    { return chops::edits::setSectionMode (d, index, mode); });
     };
-    laneList.onSetReverse = [this] (int index, bool reverse)
+    sliceLane.onSetReverse = [this] (int index, bool reverse)
     {
         applyEdit ([index, reverse] (chops::Document& d)
                    { return chops::edits::setSectionReverse (d, index, reverse); });
     };
-    laneList.onSetPitch = [this] (int index, int semis, float cents)
+    sliceLane.onSetPitch = [this] (int index, int semis, float cents)
     {
         applyEdit ([index, semis, cents] (chops::Document& d)
                    { return chops::edits::setSectionPitch (d, index, semis, cents); });
     };
-    laneList.onSetSr = [this] (int index, double hz)
+    sliceLane.onSetSr = [this] (int index, double hz)
     {
         applyEdit ([index, hz] (chops::Document& d)
                    { return chops::edits::setSectionSrOverride (d, index, hz); });
     };
-    laneList.onSetDrive = [this] (int index, float drive)
+    sliceLane.onSetDrive = [this] (int index, float drive)
     {
         applyEdit ([index, drive] (chops::Document& d)
                    { return chops::edits::setSectionDriveOverride (d, index, drive); });
     };
-    laneList.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
+    sliceLane.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
 
     // Global FX strip.
     chops::ui::configureMiniKnob (globalSr, 300.0, 48000.0, 48000.0, 0.0, 4000.0);
@@ -176,9 +183,31 @@ void ChopsEditor::refreshFromModel()
     }
 
     waveDisplay.setDocument (doc, &peaks);
-    laneList.setDocument (doc, &peaks, laneViewport.getMaximumVisibleWidth());
     padStrip.setDocument (doc);
+
+    // Clamp the selection to the current slice count; first slice by default.
+    if (doc->sample == nullptr)
+        selectedSection = -1;
+    else if (selectedSection < 0)
+        selectedSection = 0;
+    else
+        selectedSection = std::min (selectedSection, (int) doc->sections.size() - 1);
+
+    sliceLane.bind (selectedSection, doc, &peaks);
+    padStrip.setSelectedSection (selectedSection);
     repaint();
+}
+
+void ChopsEditor::selectSection (int sectionIndex)
+{
+    if (sectionIndex == selectedSection || doc == nullptr
+        || sectionIndex < 0 || sectionIndex >= (int) doc->sections.size()
+        || sliceLane.isGestureActive())
+        return;
+
+    selectedSection = sectionIndex;
+    sliceLane.bind (selectedSection, doc, &peaks);
+    padStrip.setSelectedSection (selectedSection);
 }
 
 void ChopsEditor::changeListenerCallback (juce::ChangeBroadcaster*)
@@ -191,8 +220,13 @@ void ChopsEditor::timerCallback()
     const auto section = chopsProcessor.engine().uiSectionIndex.load (std::memory_order_relaxed);
     const auto frame = chopsProcessor.engine().uiPositionFrames.load (std::memory_order_relaxed);
     waveDisplay.setPlayhead (section, frame);
-    laneList.setPlayhead (section, frame);
     padStrip.setActiveSection (section);
+
+    // Last-triggered slice becomes the edited one (also covers MIDI input).
+    if (section >= 0)
+        selectSection (section);
+
+    sliceLane.setPlayhead (section == sliceLane.boundIndex(), frame);
 }
 
 void ChopsEditor::resized()
@@ -220,10 +254,10 @@ void ChopsEditor::resized()
     padStrip.setBounds (bounds.removeFromBottom (56));
     bounds.removeFromBottom (8);
 
-    waveDisplay.setBounds (bounds.removeFromTop (juce::jmax (120, bounds.getHeight() * 2 / 5)));
+    // Always exactly two waveforms: the full sample and the selected slice.
+    waveDisplay.setBounds (bounds.removeFromTop (juce::jmax (120, bounds.getHeight() / 2)));
     bounds.removeFromTop (8);
-    laneViewport.setBounds (bounds);
-    laneList.setDocument (doc, &peaks, laneViewport.getMaximumVisibleWidth());
+    sliceLane.setBounds (bounds);
 }
 
 void ChopsEditor::paint (juce::Graphics& g)

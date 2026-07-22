@@ -161,7 +161,10 @@ void SliceLane::resized()
     gateButton.setBounds (modeRow.reduced (1));
 
     header.removeFromTop (2);
-    auto knobRow = header.withTrimmedBottom (11);   // label strip painted below
+    // Cap the knob strip so a tall lane grows its waveform, not its knobs.
+    auto knobRow = header.withTrimmedBottom (11);
+    if (knobRow.getHeight() > 54)
+        knobRow = knobRow.removeFromTop (54);
     const int knobWidth = knobRow.getWidth() / 4;
     pitchKnob.setBounds (knobRow.removeFromLeft (knobWidth));
     fineKnob.setBounds (knobRow.removeFromLeft (knobWidth));
@@ -373,54 +376,6 @@ void SliceLane::mouseMove (const juce::MouseEvent& e)
         case Drag::None:
             setMouseCursor (juce::MouseCursor::NormalCursor);
             break;
-    }
-}
-
-// --- SliceLaneList ---
-
-void SliceLaneList::setDocument (std::shared_ptr<const Document> doc, const PeakCache* peaks, int width)
-{
-    const auto count = doc != nullptr && doc->sample != nullptr ? doc->sections.size() : 0;
-
-    if (lanes.size() != count)
-    {
-        lanes.clear();
-        for (size_t i = 0; i < count; ++i)
-        {
-            auto lane = std::make_unique<SliceLane>();
-            lane->onSetRange = [this] (int idx, juce::int64 s, juce::int64 e) { if (onSetRange) onSetRange (idx, s, e); };
-            lane->onSetLoop = [this] (int idx, juce::int64 s, juce::int64 e) { if (onSetLoop) onSetLoop (idx, s, e); };
-            lane->onClearLoop = [this] (int idx) { if (onClearLoop) onClearLoop (idx); };
-            lane->onSetMode = [this] (int idx, PlayMode m) { if (onSetMode) onSetMode (idx, m); };
-            lane->onSetReverse = [this] (int idx, bool r) { if (onSetReverse) onSetReverse (idx, r); };
-            lane->onSetPitch = [this] (int idx, int semis, float cents) { if (onSetPitch) onSetPitch (idx, semis, cents); };
-            lane->onSetSr = [this] (int idx, double hz) { if (onSetSr) onSetSr (idx, hz); };
-            lane->onSetDrive = [this] (int idx, float drive) { if (onSetDrive) onSetDrive (idx, drive); };
-            lane->onPad = [this] (int note, bool on) { if (onPad) onPad (note, on); };
-            addAndMakeVisible (*lane);
-            lanes.push_back (std::move (lane));
-        }
-    }
-
-    for (size_t i = 0; i < count; ++i)
-        lanes[i]->bind ((int) i, doc, peaks);
-
-    setSize (width, (int) count * (SliceLane::kHeight + 2));
-}
-
-void SliceLaneList::setPlayhead (int activeSection, double frame)
-{
-    for (size_t i = 0; i < lanes.size(); ++i)
-        lanes[i]->setPlayhead ((int) i == activeSection, frame);
-}
-
-void SliceLaneList::resized()
-{
-    int y = 0;
-    for (auto& lane : lanes)
-    {
-        lane->setBounds (0, y, getWidth(), SliceLane::kHeight);
-        y += SliceLane::kHeight + 2;
     }
 }
 

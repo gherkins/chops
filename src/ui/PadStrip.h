@@ -9,11 +9,12 @@ namespace chops
 {
 
 // One pad per section: shows the assigned note, lights while playing,
-// click-and-hold auditions (gate-style, like hitting the MIDI pad).
+// click-and-hold auditions (gate-style, like hitting the MIDI pad). Also the
+// selector for which slice the single lane editor below shows.
 class PadStrip : public juce::Component
 {
 public:
-    std::function<void (int midiNote, bool noteOn)> onPad;
+    std::function<void (int sectionIndex, bool noteOn)> onPad;
 
     void setDocument (std::shared_ptr<const Document> newDoc)
     {
@@ -26,6 +27,15 @@ public:
         if (activeSection != sectionIndex)
         {
             activeSection = sectionIndex;
+            repaint();
+        }
+    }
+
+    void setSelectedSection (int sectionIndex)
+    {
+        if (selectedSection != sectionIndex)
+        {
+            selectedSection = sectionIndex;
             repaint();
         }
     }
@@ -49,6 +59,12 @@ public:
             g.setColour (lit ? juce::Colour (0xff5ec8a8) : juce::Colour (0xff2b2e36));
             g.fillRoundedRectangle (pad, 4.0f);
 
+            if (i == selectedSection)
+            {
+                g.setColour (juce::Colour (0xff5ec8a8));
+                g.drawRoundedRectangle (pad, 4.0f, 1.5f);
+            }
+
             g.setColour (lit ? juce::Colour (0xff17181c) : juce::Colours::whitesmoke.withAlpha (0.8f));
             g.setFont (juce::jmin (13.0f, pad.getHeight() * 0.3f));
             g.drawText (juce::MidiMessage::getMidiNoteName (
@@ -61,14 +77,14 @@ public:
     {
         pressedIndex = padAt (e.getPosition());
         if (pressedIndex >= 0 && onPad != nullptr)
-            onPad (doc->sections[(size_t) pressedIndex].midiNote, true);
+            onPad (pressedIndex, true);
         repaint();
     }
 
     void mouseUp (const juce::MouseEvent&) override
     {
         if (pressedIndex >= 0 && onPad != nullptr)
-            onPad (doc->sections[(size_t) pressedIndex].midiNote, false);
+            onPad (pressedIndex, false);
         pressedIndex = -1;
         repaint();
     }
@@ -85,6 +101,7 @@ private:
 
     std::shared_ptr<const Document> doc;
     int activeSection = -1;
+    int selectedSection = -1;
     int pressedIndex = -1;
 };
 
