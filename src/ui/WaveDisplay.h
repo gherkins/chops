@@ -31,6 +31,10 @@ public:
     // display shows every playing slice, not just the newest.
     void setPlayheads (const std::vector<std::pair<int, double>>& voices);
 
+    // The lane-bound slice: gets a background lift so it stays identifiable
+    // among many playing slices.
+    void setSelectedSection (int index);
+
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -57,6 +61,7 @@ private:
     int dragIndex = -1;
     bool didDrag = false;
     std::vector<std::pair<int, double>> playheads;
+    int selectedSection = -1;
 
     static constexpr int kHandleHitPx = 6;
     static constexpr double kMinViewFrames = 32.0;

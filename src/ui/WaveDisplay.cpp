@@ -11,6 +11,7 @@ static const juce::Colour kWave { 0xff5ec8a8 };
 static const juce::Colour kMarker { 0xffd9a05a };
 static const juce::Colour kEndMarker { 0xff7ab8ff };
 static const juce::Colour kPlayhead { 0xffffffff };
+static const juce::Colour kSelectedBg { 0x14ffffff };   // lift over panel + tints
 
 void WaveDisplay::setDocument (std::shared_ptr<const Document> newDoc, const PeakCache* newPeaks)
 {
@@ -36,6 +37,15 @@ void WaveDisplay::setPlayheads (const std::vector<std::pair<int, double>>& voice
         return;
 
     playheads = voices;
+    repaint();
+}
+
+void WaveDisplay::setSelectedSection (int index)
+{
+    if (index == selectedSection)
+        return;
+
+    selectedSection = index;
     repaint();
 }
 
@@ -133,6 +143,21 @@ void WaveDisplay::paint (juce::Graphics& g)
         const auto x2 = (float) std::min ((double) width, frameToX ((double) sec.end));
         if (x2 > x1)
             g.fillRect (x1, 0.0f, x2 - x1, bounds.getHeight());
+    }
+
+    // Selected slice: neutral lift drawn over the playing tint, so idle it
+    // reads as a lighter background and while sounding it stays visually
+    // distinct from the other playing slices.
+    if (selectedSection >= 0 && selectedSection < (int) doc->sections.size())
+    {
+        const auto& sec = doc->sections[(size_t) selectedSection];
+        const auto x1 = (float) std::max (0.0, frameToX ((double) sec.start));
+        const auto x2 = (float) std::min ((double) width, frameToX ((double) sec.end));
+        if (x2 > x1)
+        {
+            g.setColour (kSelectedBg);
+            g.fillRect (x1, 0.0f, x2 - x1, bounds.getHeight());
+        }
     }
 
     render::drawWave (g, bounds, buffer, *peaks, viewStart, viewLength, kWave);

@@ -95,7 +95,9 @@ republishing.
 - **UI** (`src/PluginEditor.cpp`, `src/ui/`): editor listens to the processor
   (`ChangeBroadcaster`) and pulls model snapshots; a 30 Hz timer reads the
   engine's per-voice playback atomics (`uiVoices`) — the main wave and pads
-  show ALL playing slices; `uiSectionIndex` + `uiTriggerSerial` (stamped at
+  show ALL playing slices, and the main wave lifts the selected slice's
+  background (neutral overlay on top of the playing tint, so it stays distinct
+  under polyphony); `uiSectionIndex` + `uiTriggerSerial` (stamped at
   note-on) drive only the last-triggered lane selection, edge-wise: the editor
   applies the section only when the serial advances, so only a new trigger
   moves the selection — a voice ending never hands it back to an older,

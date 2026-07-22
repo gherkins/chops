@@ -218,6 +218,7 @@ void ChopsEditor::refreshFromModel()
 
     sliceLane.bind (selectedSection, doc, &peaks);
     padStrip.setSelectedSection (selectedSection);
+    waveDisplay.setSelectedSection (selectedSection);
     repaint();
 }
 
@@ -231,6 +232,7 @@ void ChopsEditor::selectSection (int sectionIndex)
     selectedSection = sectionIndex;
     sliceLane.bind (selectedSection, doc, &peaks);
     padStrip.setSelectedSection (selectedSection);
+    waveDisplay.setSelectedSection (selectedSection);
 }
 
 void ChopsEditor::changeListenerCallback (juce::ChangeBroadcaster*)
