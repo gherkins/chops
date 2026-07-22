@@ -1,6 +1,7 @@
 #include "Voice.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace chops
 {
@@ -12,7 +13,7 @@ void Voice::reset() noexcept
     sectionIndex_ = -1;
 }
 
-void Voice::start (const SampleView& sample, const VoiceParams& params,
+void Voice::start (const SampleView& sample, const VoiceParams& params, const VoiceFx& fx,
                    int midiNote, float velocity, double outputRate,
                    int sectionIndex, std::uint64_t serial) noexcept
 {
@@ -25,6 +26,7 @@ void Voice::start (const SampleView& sample, const VoiceParams& params,
 
     sample_ = sample;
     params_ = params;
+    fx_ = fx;
     outputRate_ = outputRate;
     midiNote_ = midiNote;
     sectionIndex_ = sectionIndex;
@@ -32,13 +34,22 @@ void Voice::start (const SampleView& sample, const VoiceParams& params,
     velocityGain = velocity;
     rampGain = 1.0f;
     rampStep = 0.0f;
+    gainNow = fx.gain;      // no ramp-in: the attack ramp handles the declick
     attackRemaining = kAttackFrames;
+    decimPhase = 1.0;       // capture on the very first frame
+    holdL = holdR = 0.0f;
 
     // Reverse starts on the last frame inside the section.
     phase = params_.reverse ? (double) (params_.end - 1) : (double) params_.start;
-    increment = params_.rate;
+    increment = fx_.rate;
     held = true;
     state = State::Playing;
+}
+
+void Voice::updateFx (const VoiceFx& fx) noexcept
+{
+    fx_ = fx;
+    increment = fx.rate;
 }
 
 void Voice::noteOff() noexcept
@@ -143,6 +154,13 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
     const bool canLoop = params_.mode == PlayMode::LoopRun && params_.hasLoop();
     const auto loopLength = canLoop ? (double) (params_.loopEnd - params_.loopStart) : 0.0;
 
+    // Per-block DSP constants.
+    const double decimIncrement = fx_.decimHz > 0.0 ? fx_.decimHz / outputRate_ : 0.0;
+    const float driveG = fx_.drive * 8.0f;
+    const bool shaping = driveG > 1.0e-3f;
+    // tanh(g*x)/tanh(g): transparent as g->0, normalized hard clip as g grows.
+    const float driveNorm = shaping ? 1.0f / std::tanh (driveG) : 1.0f;
+
     for (int i = 0; i < numFrames; ++i)
     {
         const bool looping = canLoop && held;
@@ -164,7 +182,8 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
             return;
         }
 
-        float gain = velocityGain * params_.gain;
+        gainNow += (fx_.gain - gainNow) * 0.002f;
+        float gain = velocityGain * gainNow;
 
         if (attackRemaining > 0)
         {
@@ -183,16 +202,36 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
             gain *= rampGain;
         }
 
-        const float l = readLooped (srcL, phase, looping);
+        float l = readLooped (srcL, phase, looping);
+        float r = stereoSrc ? readLooped (srcR, phase, looping) : l;
+
+        if (decimIncrement > 0.0)
+        {
+            if (decimPhase >= 1.0)
+            {
+                decimPhase -= std::floor (decimPhase);
+                holdL = l;
+                holdR = r;
+            }
+            l = holdL;
+            r = holdR;
+            decimPhase += decimIncrement;
+        }
+
+        if (shaping)
+        {
+            l = std::tanh (driveG * l) * driveNorm;
+            r = stereoSrc || decimIncrement > 0.0 ? std::tanh (driveG * r) * driveNorm : l;
+        }
 
         if (stereoOut)
         {
             outL[i] += l * gain;
-            outR[i] += (stereoSrc ? readLooped (srcR, phase, looping) : l) * gain;
+            outR[i] += r * gain;
         }
         else
         {
-            outL[i] += (stereoSrc ? 0.5f * (l + readLooped (srcR, phase, looping)) : l) * gain;
+            outL[i] += 0.5f * (l + r) * gain;
         }
 
         phase += params_.reverse ? -increment : increment;

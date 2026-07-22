@@ -42,6 +42,7 @@ private:
     juce::ComboBox sliceCountBox;
     juce::TextButton transientButton { "transients" };
     juce::TextButton clearButton { "clear" };
+    juce::Slider globalSr, globalDrive, globalPitch, globalFine, globalGain;
 
     bool dragOver = false;
 

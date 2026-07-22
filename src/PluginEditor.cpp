@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "model/Edits.h"
+#include "ui/Knobs.h"
 
 static bool isAudioFile (const juce::String& path)
 {
@@ -75,7 +76,48 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         applyEdit ([index, reverse] (chops::Document& d)
                    { return chops::edits::setSectionReverse (d, index, reverse); });
     };
+    laneList.onSetPitch = [this] (int index, int semis, float cents)
+    {
+        applyEdit ([index, semis, cents] (chops::Document& d)
+                   { return chops::edits::setSectionPitch (d, index, semis, cents); });
+    };
+    laneList.onSetSr = [this] (int index, double hz)
+    {
+        applyEdit ([index, hz] (chops::Document& d)
+                   { return chops::edits::setSectionSrOverride (d, index, hz); });
+    };
+    laneList.onSetDrive = [this] (int index, float drive)
+    {
+        applyEdit ([index, drive] (chops::Document& d)
+                   { return chops::edits::setSectionDriveOverride (d, index, drive); });
+    };
     laneList.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
+
+    // Global FX strip.
+    chops::ui::configureMiniKnob (globalSr, 300.0, 48000.0, 48000.0, 0.0, 4000.0);
+    chops::ui::configureMiniKnob (globalDrive, 0.0, 1.0, 0.0);
+    chops::ui::configureMiniKnob (globalPitch, -24.0, 24.0, 0.0, 1.0);
+    chops::ui::configureMiniKnob (globalFine, -100.0, 100.0, 0.0, 1.0);
+    chops::ui::configureMiniKnob (globalGain, 0.0, 2.0, 1.0);
+    for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
+        addAndMakeVisible (*k);
+
+    const auto sendGlobals = [this]
+    {
+        applyEdit ([sr = globalSr.getValue(), drive = globalDrive.getValue(),
+                    pitch = globalPitch.getValue(), fine = globalFine.getValue(),
+                    gain = globalGain.getValue()] (chops::Document& d)
+        {
+            d.global.srReduce = sr >= chops::ui::kSrFollowThreshold ? 0.0 : sr;
+            d.global.drive = (float) drive;
+            d.global.pitchSemis = (int) pitch;
+            d.global.fineCents = (float) fine;
+            d.global.gain = (float) gain;
+            return true;
+        });
+    };
+    for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
+        k->onValueChange = sendGlobals;
 
     sliceEqualButton.onClick = [this]
     {
@@ -117,6 +159,13 @@ void ChopsEditor::refreshFromModel()
 {
     doc = chopsProcessor.document();
 
+    const auto& g = doc->global;
+    globalSr.setValue (g.srReduce > 0.0 ? g.srReduce : 48000.0, juce::dontSendNotification);
+    globalDrive.setValue (g.drive, juce::dontSendNotification);
+    globalPitch.setValue (g.pitchSemis, juce::dontSendNotification);
+    globalFine.setValue (g.fineCents, juce::dontSendNotification);
+    globalGain.setValue (g.gain, juce::dontSendNotification);
+
     if (doc->sample != peaksBuiltFor)
     {
         peaksBuiltFor = doc->sample;
@@ -150,14 +199,19 @@ void ChopsEditor::resized()
 {
     auto bounds = getLocalBounds().reduced (12);
 
-    auto topBar = bounds.removeFromTop (30);
-    sliceCountBox.setBounds (topBar.removeFromLeft (64));
-    topBar.removeFromLeft (4);
-    sliceEqualButton.setBounds (topBar.removeFromLeft (72));
-    topBar.removeFromLeft (4);
-    transientButton.setBounds (topBar.removeFromLeft (92));
-    topBar.removeFromLeft (4);
-    clearButton.setBounds (topBar.removeFromLeft (64));
+    auto topBar = bounds.removeFromTop (52);
+    auto buttonRow = topBar.withHeight (28).withY (topBar.getY() + 6);
+    sliceCountBox.setBounds (buttonRow.removeFromLeft (64));
+    buttonRow.removeFromLeft (4);
+    sliceEqualButton.setBounds (buttonRow.removeFromLeft (72));
+    buttonRow.removeFromLeft (4);
+    transientButton.setBounds (buttonRow.removeFromLeft (92));
+    buttonRow.removeFromLeft (4);
+    clearButton.setBounds (buttonRow.removeFromLeft (64));
+
+    auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (11);
+    for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
+        k->setBounds (knobArea.removeFromLeft (48));
 
     bounds.removeFromTop (8);
     auto info = bounds.removeFromBottom (22);
@@ -175,6 +229,18 @@ void ChopsEditor::resized()
 void ChopsEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff17181c));
+
+    // Global knob labels.
+    g.setColour (juce::Colours::whitesmoke.withAlpha (0.45f));
+    g.setFont (9.0f);
+    {
+        const std::pair<const juce::Slider*, const char*> labels[] =
+            { { &globalSr, "sr" }, { &globalDrive, "drive" }, { &globalPitch, "pitch" },
+              { &globalFine, "fine" }, { &globalGain, "gain" } };
+        for (const auto& [knob, text] : labels)
+            g.drawText (text, knob->getBounds().withY (knob->getBottom()).withHeight (10),
+                        juce::Justification::centred);
+    }
 
     const auto info = getLocalBounds().reduced (12).removeFromBottom (22);
     g.setFont (13.0f);

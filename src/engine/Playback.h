@@ -36,11 +36,20 @@ struct VoiceParams
     std::int64_t loopEnd = -1;
     PlayMode mode = PlayMode::OneShot;
     bool reverse = false;
-    double rate = 1.0;             // resolved playback rate (pitch * srcRate/hostRate)
-    float gain = 1.0f;
     int xfadeFrames = 0;           // loop crossfade
 
     bool hasLoop() const noexcept { return loopStart >= 0 && loopEnd > loopStart; }
+};
+
+// Per-voice DSP settings, resolved from section overrides falling back to the
+// globals. Refreshed every block for running voices, so tweaking FX live
+// affects a sustaining loop — a performance feature, not just a preset one.
+struct VoiceFx
+{
+    double rate = 1.0;             // playback rate (pitch * srcRate/hostRate)
+    double decimHz = 0.0;          // sample-and-hold rate; <= 0 (or >= host rate) = clean
+    float drive = 0.0f;            // 0..1 waveshaper amount
+    float gain = 1.0f;             // section gain * global gain
 };
 
 } // namespace chops

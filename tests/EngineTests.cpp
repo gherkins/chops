@@ -403,6 +403,75 @@ int main()
         EXPECT (! d.sections[0].hasLoop());
     }
 
+    // --- lo-fi DSP: sample-and-hold decimation, drive shaper, live update ---
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        // Section 0 overrides SR to a quarter of the host rate; global is clean.
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::OneShot;
+        EXPECT (chops::edits::setSectionSrOverride (d, 0, kRate / 4.0));
+
+        chops::Engine fxEngine;
+        fxEngine.prepare (kRate, 512);
+        fxEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (1, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        fxEngine.process (block, midi);
+
+        // Hold ticks every 4 frames: 40..43 hold ramp(40), 44 jumps to ramp(44).
+        EXPECT (block.getSample (0, 40) == 40.0f);
+        EXPECT (block.getSample (0, 41) == 40.0f);
+        EXPECT (block.getSample (0, 43) == 40.0f);
+        EXPECT (block.getSample (0, 44) == 44.0f);
+
+        // Live update: switch the override off mid-note -> clean playback resumes.
+        chops::Document d2 (d);
+        EXPECT (chops::edits::setSectionSrOverride (d2, 0, 0.0));
+        fxEngine.publishDocument (std::make_unique<const chops::Document> (d2));
+
+        block.clear();
+        juce::MidiBuffer noMidi;
+        fxEngine.process (block, noMidi);
+        EXPECT (block.getSample (0, 100) == 612.0f);   // 512 + 100, no holds
+    }
+
+    {
+        // Drive: DC 0.5 through tanh(g*x)/tanh(g) at drive 1 (g = 8).
+        auto dc = std::make_shared<chops::SampleData>();
+        dc->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            dc->buffer.setSample (0, i, 0.5f);
+        dc->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = dc;
+        d.global.drive = 1.0f;
+        chops::edits::clearSlices (d);
+
+        chops::Engine driveEngine;
+        driveEngine.prepare (kRate, 512);
+        driveEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (1, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        driveEngine.process (block, midi);
+
+        const float expected = std::tanh (8.0f * 0.5f) / std::tanh (8.0f);
+        EXPECT (std::abs (block.getSample (0, 100) - expected) < 1.0e-5f);
+    }
+
     wavFile.deleteFile();
 
     if (failures == 0)

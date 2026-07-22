@@ -31,6 +31,17 @@ static double resolvePlaybackRate (const Section& sec, const GlobalParams& g,
     return std::exp2 (semis / 12.0) * sourceRate / hostRate;
 }
 
+static VoiceFx resolveFx (const Section& sec, const GlobalParams& g,
+                          double sourceRate, double hostRate) noexcept
+{
+    VoiceFx fx;
+    fx.rate = resolvePlaybackRate (sec, g, sourceRate, hostRate);
+    fx.decimHz = sec.srOverride > 0.0 ? sec.srOverride : g.srReduce;
+    fx.drive = sec.driveOverride >= 0.0f ? sec.driveOverride : g.drive;
+    fx.gain = sec.gain * g.gain;
+    return fx;
+}
+
 void Engine::startSectionVoice (const Document& doc, int sectionIdx, int note, float velocity) noexcept
 {
     // Mono per section: a retrigger cuts its own predecessor with a fast fade.
@@ -67,12 +78,11 @@ void Engine::startSectionVoice (const Document& doc, int sectionIdx, int note, f
     p.loopEnd = sec.loopEnd;
     p.mode = sec.mode;
     p.reverse = sec.reverse;
-    p.rate = resolvePlaybackRate (sec, doc.global, smp.sourceSampleRate, hostRate);
-    p.gain = sec.gain * doc.global.gain;
     p.xfadeFrames = sec.xfadeFrames;
 
-    target->start (makeSampleView (smp), p, note, velocity, hostRate,
-                   sectionIdx, nextSerial++);
+    target->start (makeSampleView (smp), p,
+                   resolveFx (sec, doc.global, smp.sourceSampleRate, hostRate),
+                   note, velocity, hostRate, sectionIdx, nextSerial++);
 }
 
 void Engine::handleMidi (const Document* doc, const juce::uint8* data, int numBytes) noexcept
@@ -143,6 +153,18 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
                 v.fastFade();
 
         lastDoc = doc;
+    }
+
+    // Live DSP: refresh every running voice's FX from the current document,
+    // so parameter tweaks land on sustaining loops, not just new notes.
+    if (doc != nullptr && doc->sample != nullptr)
+    {
+        const void* currentId = makeSampleView (*doc->sample).channels;
+        for (auto& v : voices)
+            if (v.isActive() && v.sampleId() == currentId
+                && v.sectionIndex() >= 0 && v.sectionIndex() < (int) doc->sections.size())
+                v.updateFx (resolveFx (doc->sections[(size_t) v.sectionIndex()], doc->global,
+                                       doc->sample->sourceSampleRate, hostRate));
     }
 
     const int total = buffer.getNumSamples();

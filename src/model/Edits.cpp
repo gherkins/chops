@@ -272,4 +272,34 @@ bool setSectionReverse (Document& doc, int index, bool reverse)
     return true;
 }
 
+bool setSectionPitch (Document& doc, int index, int semis, float cents)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    auto& sec = doc.sections[(size_t) index];
+    sec.pitchSemis = std::clamp (semis, -24, 24);
+    sec.fineCents = std::clamp (cents, -100.0f, 100.0f);
+    return true;
+}
+
+bool setSectionSrOverride (Document& doc, int index, double hz)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].srOverride = hz > 0.0 ? std::clamp (hz, 300.0, 48000.0) : 0.0;
+    return true;
+}
+
+bool setSectionDriveOverride (Document& doc, int index, float drive)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].driveOverride = drive < 0.0f ? -1.0f
+                                                              : std::clamp (drive, 0.0f, 1.0f);
+    return true;
+}
+
 } // namespace chops::edits

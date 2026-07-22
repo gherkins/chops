@@ -1,5 +1,6 @@
 #include "SliceLane.h"
 
+#include "Knobs.h"
 #include "WaveRender.h"
 #include "../model/Edits.h"
 
@@ -30,6 +31,33 @@ SliceLane::SliceLane()
         if (onSetReverse)
             onSetReverse (index, reverseButton.getToggleState());
     };
+
+    ui::configureMiniKnob (pitchKnob, -24.0, 24.0, 0.0, 1.0);
+    ui::configureMiniKnob (fineKnob, -100.0, 100.0, 0.0, 1.0);
+    ui::configureMiniKnob (srKnob, 300.0, 48000.0, 48000.0, 0.0, 4000.0);
+    ui::configureMiniKnob (driveKnob, -0.05, 1.0, -0.05);
+    for (auto* k : { &pitchKnob, &fineKnob, &srKnob, &driveKnob })
+        addAndMakeVisible (*k);
+
+    const auto sendPitch = [this]
+    {
+        if (onSetPitch)
+            onSetPitch (index, (int) pitchKnob.getValue(), (float) fineKnob.getValue());
+    };
+    pitchKnob.onValueChange = sendPitch;
+    fineKnob.onValueChange = sendPitch;
+    srKnob.onValueChange = [this]
+    {
+        const auto v = srKnob.getValue();
+        if (onSetSr)
+            onSetSr (index, v >= ui::kSrFollowThreshold ? 0.0 : v);
+    };
+    driveKnob.onValueChange = [this]
+    {
+        const auto v = (float) driveKnob.getValue();
+        if (onSetDrive)
+            onSetDrive (index, v < 0.0f ? -1.0f : v);
+    };
 }
 
 const Section* SliceLane::section() const
@@ -52,6 +80,12 @@ void SliceLane::bind (int sectionIndex, std::shared_ptr<const Document> newDoc, 
         oneShotButton.setToggleState (sec->mode == PlayMode::OneShot, juce::dontSendNotification);
         gateButton.setToggleState (sec->mode == PlayMode::Gate, juce::dontSendNotification);
         reverseButton.setToggleState (sec->reverse, juce::dontSendNotification);
+        pitchKnob.setValue (sec->pitchSemis, juce::dontSendNotification);
+        fineKnob.setValue (sec->fineCents, juce::dontSendNotification);
+        srKnob.setValue (sec->srOverride > 0.0 ? sec->srOverride : 48000.0,
+                         juce::dontSendNotification);
+        driveKnob.setValue (sec->driveOverride >= 0.0f ? sec->driveOverride : -0.05,
+                            juce::dontSendNotification);
     }
 
     repaint();
@@ -113,8 +147,10 @@ juce::int64 SliceLane::xToFrame (double x) const
 
 void SliceLane::resized()
 {
-    auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6);
-    header.removeFromTop (20);   // note name row, painted
+    auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
+
+    auto nameRow = header.removeFromTop (18);
+    reverseButton.setBounds (nameRow.removeFromRight (52));
 
     auto modeRow = header.removeFromTop (22);
     const int buttonWidth = modeRow.getWidth() / 3;
@@ -122,8 +158,13 @@ void SliceLane::resized()
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth).reduced (1));
     gateButton.setBounds (modeRow.reduced (1));
 
-    header.removeFromTop (4);
-    reverseButton.setBounds (header.removeFromTop (20));
+    header.removeFromTop (2);
+    auto knobRow = header.withTrimmedBottom (11);   // label strip painted below
+    const int knobWidth = knobRow.getWidth() / 4;
+    pitchKnob.setBounds (knobRow.removeFromLeft (knobWidth));
+    fineKnob.setBounds (knobRow.removeFromLeft (knobWidth));
+    srKnob.setBounds (knobRow.removeFromLeft (knobWidth));
+    driveKnob.setBounds (knobRow);
 }
 
 void SliceLane::paint (juce::Graphics& g)
@@ -143,6 +184,18 @@ void SliceLane::paint (juce::Graphics& g)
     g.drawText (juce::MidiMessage::getMidiNoteName (sec->midiNote, true, true, 3),
                 juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 18),
                 juce::Justification::centredLeft);
+
+    // Knob labels.
+    g.setColour (juce::Colours::whitesmoke.withAlpha (0.45f));
+    g.setFont (9.0f);
+    static const char* const knobLabels[] = { "pitch", "fine", "sr", "drive" };
+    for (int k = 0; k < 4; ++k)
+    {
+        const auto* knob = k == 0 ? &pitchKnob : k == 1 ? &fineKnob : k == 2 ? &srKnob : &driveKnob;
+        g.drawText (knobLabels[k],
+                    knob->getBounds().withY (knob->getBottom()).withHeight (10),
+                    juce::Justification::centred);
+    }
 
     const auto area = waveBounds().toFloat();
     const auto& buffer = doc->sample->buffer;
@@ -338,6 +391,9 @@ void SliceLaneList::setDocument (std::shared_ptr<const Document> doc, const Peak
             lane->onClearLoop = [this] (int idx) { if (onClearLoop) onClearLoop (idx); };
             lane->onSetMode = [this] (int idx, PlayMode m) { if (onSetMode) onSetMode (idx, m); };
             lane->onSetReverse = [this] (int idx, bool r) { if (onSetReverse) onSetReverse (idx, r); };
+            lane->onSetPitch = [this] (int idx, int semis, float cents) { if (onSetPitch) onSetPitch (idx, semis, cents); };
+            lane->onSetSr = [this] (int idx, double hz) { if (onSetSr) onSetSr (idx, hz); };
+            lane->onSetDrive = [this] (int idx, float drive) { if (onSetDrive) onSetDrive (idx, drive); };
             lane->onPad = [this] (int note, bool on) { if (onPad) onPad (note, on); };
             addAndMakeVisible (*lane);
             lanes.push_back (std::move (lane));

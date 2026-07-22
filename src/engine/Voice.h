@@ -12,12 +12,15 @@ class Voice
 public:
     void reset() noexcept;
 
-    void start (const SampleView& sample, const VoiceParams& params,
+    void start (const SampleView& sample, const VoiceParams& params, const VoiceFx& fx,
                 int midiNote, float velocity, double outputRate,
                 int sectionIndex, std::uint64_t serial) noexcept;
 
     void noteOff() noexcept;    // Gate: release ramp. OneShot: ignored.
     void fastFade() noexcept;   // steal / document-change kill, ~2 ms
+
+    // Live per-block DSP refresh: rate/decimation/drive jump, gain is smoothed.
+    void updateFx (const VoiceFx& fx) noexcept;
 
     void render (float* outL, float* outR, int numFrames) noexcept;
 
@@ -43,6 +46,7 @@ private:
 
     SampleView sample_;
     VoiceParams params_;
+    VoiceFx fx_;
     State state = State::Idle;
     double phase = 0.0;          // absolute position in source frames
     double increment = 0.0;
@@ -50,6 +54,9 @@ private:
     float velocityGain = 1.0f;
     float rampGain = 1.0f;       // release / fast-fade envelope
     float rampStep = 0.0f;
+    float gainNow = 1.0f;        // smoothed toward fx_.gain
+    double decimPhase = 1.0;     // sample-and-hold accumulator
+    float holdL = 0.0f, holdR = 0.0f;
     int attackRemaining = 0;
     bool held = false;           // LoopRun: wraps only while the note is held
     int midiNote_ = -1;

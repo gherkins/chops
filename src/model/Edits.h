@@ -42,5 +42,8 @@ bool setSectionLoop (Document& doc, int index, juce::int64 loopStart, juce::int6
 bool clearSectionLoop (Document& doc, int index);
 bool setSectionMode (Document& doc, int index, PlayMode mode);
 bool setSectionReverse (Document& doc, int index, bool reverse);
+bool setSectionPitch (Document& doc, int index, int semis, float cents);
+bool setSectionSrOverride (Document& doc, int index, double hz);       // 0 = follow global
+bool setSectionDriveOverride (Document& doc, int index, float drive);  // < 0 = follow global
 
 } // namespace chops::edits

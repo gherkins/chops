@@ -16,7 +16,7 @@ class SliceLane : public juce::Component
 {
 public:
     static constexpr int kHeight = 104;
-    static constexpr int kHeaderWidth = 118;
+    static constexpr int kHeaderWidth = 196;
 
     // All callbacks receive the section index this lane is bound to.
     std::function<void (int, juce::int64, juce::int64)> onSetRange;
@@ -24,6 +24,9 @@ public:
     std::function<void (int)> onClearLoop;
     std::function<void (int, PlayMode)> onSetMode;
     std::function<void (int, bool)> onSetReverse;
+    std::function<void (int, int, float)> onSetPitch;      // semis, cents
+    std::function<void (int, double)> onSetSr;             // Hz, 0 = follow global
+    std::function<void (int, float)> onSetDrive;           // 0..1, -1 = follow global
     std::function<void (int midiNote, bool on)> onPad;
 
     SliceLane();
@@ -62,6 +65,7 @@ private:
 
     juce::TextButton loopButton { "loop" }, oneShotButton { "1shot" }, gateButton { "gate" };
     juce::ToggleButton reverseButton { "rev" };
+    juce::Slider pitchKnob, fineKnob, srKnob, driveKnob;
 
     static constexpr int kEdgeHitPx = 6;
 };
@@ -76,6 +80,9 @@ public:
     std::function<void (int)> onClearLoop;
     std::function<void (int, PlayMode)> onSetMode;
     std::function<void (int, bool)> onSetReverse;
+    std::function<void (int, int, float)> onSetPitch;
+    std::function<void (int, double)> onSetSr;
+    std::function<void (int, float)> onSetDrive;
     std::function<void (int midiNote, bool on)> onPad;
 
     void setDocument (std::shared_ptr<const Document> doc, const PeakCache* peaks, int width);
