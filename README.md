@@ -19,9 +19,12 @@ NI Battery, Amigo Sampler, and the Renoise sampler.
 Requires CMake ≥ 3.22 and a C++20 compiler. JUCE 8 is fetched automatically.
 
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+make run    # build and launch the standalone app
+make        # build all formats (VST3, AU, Standalone)
+make test   # run the engine/state test suite
 ```
+
+(Or invoke CMake directly: `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build`.)
 
 Built plugins are copied to `~/Library/Audio/Plug-Ins` on macOS.
 
