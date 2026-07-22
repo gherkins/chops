@@ -175,9 +175,14 @@ void SliceLane::resized()
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     gateButton.setBounds (modeRow);
 
+    // The direction row is indented under the loop segment; paint() draws an
+    // elbow connector from that segment into it.
+    header.removeFromTop (2);
     auto loopDirRow = header.removeFromTop (22).reduced (0, 1);
-    loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
-    loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
+    loopDirRow.removeFromLeft (16);
+    const int dirButtonWidth = loopDirRow.getWidth() / 3;
+    loopFwdButton.setBounds (loopDirRow.removeFromLeft (dirButtonWidth));
+    loopBackButton.setBounds (loopDirRow.removeFromLeft (dirButtonWidth));
     loopPingPongButton.setBounds (loopDirRow);
 
     header.removeFromTop (2);
@@ -209,6 +214,18 @@ void SliceLane::paint (juce::Graphics& g)
     g.drawText (juce::MidiMessage::getMidiNoteName (sec->midiNote, true, true, 3),
                 juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 18),
                 juce::Justification::centredLeft);
+
+    // Elbow connector: the direction switch belongs to the loop mode segment.
+    {
+        const bool linkActive = loopFwdButton.isEnabled();
+        g.setColour (linkActive ? kWave.withAlpha (0.9f)
+                                : juce::Colours::whitesmoke.withAlpha (0.25f));
+        const float x = (float) loopButton.getX() + 8.0f;
+        const float top = (float) loopButton.getBottom();
+        const float midY = (float) loopFwdButton.getBounds().getCentreY();
+        g.fillRect (x, top, 1.5f, midY - top);
+        g.fillRect (x, midY, (float) loopFwdButton.getX() - x, 1.5f);
+    }
 
     // Knob labels.
     g.setColour (juce::Colours::whitesmoke.withAlpha (0.55f));
