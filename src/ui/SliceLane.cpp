@@ -175,14 +175,12 @@ void SliceLane::resized()
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     gateButton.setBounds (modeRow);
 
-    // The direction row is indented under the loop segment; paint() draws an
-    // elbow connector from that segment into it.
-    header.removeFromTop (2);
+    // Aligned with the mode row; paint() draws a connector tree from the loop
+    // segment down into all three direction segments through this gap.
+    header.removeFromTop (6);
     auto loopDirRow = header.removeFromTop (22).reduced (0, 1);
-    loopDirRow.removeFromLeft (16);
-    const int dirButtonWidth = loopDirRow.getWidth() / 3;
-    loopFwdButton.setBounds (loopDirRow.removeFromLeft (dirButtonWidth));
-    loopBackButton.setBounds (loopDirRow.removeFromLeft (dirButtonWidth));
+    loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
+    loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopPingPongButton.setBounds (loopDirRow);
 
     header.removeFromTop (2);
@@ -215,16 +213,26 @@ void SliceLane::paint (juce::Graphics& g)
                 juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 18),
                 juce::Justification::centredLeft);
 
-    // Elbow connector: the direction switch belongs to the loop mode segment.
+    // Connector tree: a stem from the loop mode segment splits into all three
+    // direction segments, making the ownership obvious.
     {
-        const bool linkActive = loopFwdButton.isEnabled();
-        g.setColour (linkActive ? kWave.withAlpha (0.9f)
-                                : juce::Colours::whitesmoke.withAlpha (0.25f));
-        const float x = (float) loopButton.getX() + 8.0f;
+        g.setColour (loopFwdButton.isEnabled() ? kWave.withAlpha (0.9f)
+                                               : juce::Colours::whitesmoke.withAlpha (0.25f));
+
+        const float stemX = (float) loopButton.getBounds().getCentreX();
         const float top = (float) loopButton.getBottom();
-        const float midY = (float) loopFwdButton.getBounds().getCentreY();
-        g.fillRect (x, top, 1.5f, midY - top);
-        g.fillRect (x, midY, (float) loopFwdButton.getX() - x, 1.5f);
+        const float rowTop = (float) loopFwdButton.getY();
+        const float busY = (top + rowTop) * 0.5f;
+        const float firstX = (float) loopFwdButton.getBounds().getCentreX();
+        const float lastX = (float) loopPingPongButton.getBounds().getCentreX();
+
+        g.fillRect (stemX - 0.75f, top, 1.5f, busY - top);
+        g.fillRect (firstX, busY - 0.75f, lastX - firstX, 1.5f);
+        for (const auto* b : { &loopFwdButton, &loopBackButton, &loopPingPongButton })
+        {
+            const float x = (float) b->getBounds().getCentreX();
+            g.fillRect (x - 0.75f, busY, 1.5f, rowTop - busY);
+        }
     }
 
     // Knob labels.
