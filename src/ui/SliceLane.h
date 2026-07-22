@@ -73,7 +73,7 @@ private:
     bool padPressed = false;
 
     juce::TextButton loopButton { "loop" }, oneShotButton { "1shot" }, gateButton { "gate" };
-    juce::ToggleButton reverseButton { "rev" };
+    juce::TextButton reverseButton { "rev" };   // toggle-styled like the mode row
     juce::Slider pitchKnob, fineKnob, srKnob, driveKnob;
 
     static constexpr int kEdgeHitPx = 6;

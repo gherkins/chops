@@ -14,14 +14,14 @@ static const juce::Colour kLoop { 0xff7ab8ff };
 
 SliceLane::SliceLane()
 {
-    for (auto* b : { &loopButton, &oneShotButton, &gateButton })
+    for (auto* b : { &loopButton, &oneShotButton, &gateButton, &reverseButton })
     {
         addAndMakeVisible (*b);
         b->setClickingTogglesState (false);
         b->setColour (juce::TextButton::buttonOnColourId, kWave);
         b->setColour (juce::TextButton::textColourOnId, kHeaderBg);
     }
-    addAndMakeVisible (reverseButton);
+    reverseButton.setClickingTogglesState (true);
 
     loopButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::LoopRun); };
     oneShotButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::OneShot); };
@@ -137,8 +137,7 @@ void SliceLane::resized()
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
     auto nameRow = header.removeFromTop (18);
-    const auto revArea = nameRow.removeFromRight (52);
-    reverseButton.setBounds (revArea.withSizeKeepingCentre (revArea.getWidth(), 15));
+    reverseButton.setBounds (nameRow.removeFromRight (44));
 
     auto modeRow = header.removeFromTop (22);
     const int buttonWidth = modeRow.getWidth() / 3;
