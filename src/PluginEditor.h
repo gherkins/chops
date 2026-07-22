@@ -39,6 +39,7 @@ private:
     chops::SliceLane sliceLane;      // single lane: shows the selected slice
     chops::PadStrip padStrip;
     int selectedSection = -1;        // first slice by default, then last triggered
+    std::uint64_t lastTriggerSerial = 0;   // engine triggers already applied
     juce::TextButton sliceEqualButton { "slice =" };
     juce::ComboBox sliceCountBox;
     juce::TextButton transientButton { "transients" };

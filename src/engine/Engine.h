@@ -29,9 +29,11 @@ public:
     void process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept;
 
     // UI feedback (read from message thread, torn values are harmless).
-    // Newest active voice — drives the last-triggered lane selection.
+    // Stamped at note-on: the last-triggered section plus a serial that bumps
+    // per trigger, so the editor follows triggers edge-wise — a voice ending
+    // never moves the selection back to an older, still-sounding slice.
     std::atomic<int> uiSectionIndex { -1 };
-    std::atomic<double> uiPositionFrames { -1.0 };
+    std::atomic<std::uint64_t> uiTriggerSerial { 0 };
 
     // Per-voice snapshots so polyphony is visible: every playing section and
     // playhead, not just the newest one.

@@ -258,9 +258,19 @@ void ChopsEditor::timerCallback()
     padStrip.setActiveSections (std::move (playingSections));
 
     // Last-triggered slice becomes the edited one (also covers MIDI input).
-    const auto newest = engine.uiSectionIndex.load (std::memory_order_relaxed);
-    if (newest >= 0)
-        selectSection (newest);
+    // Edge-triggered on the serial: only a new note-on moves the selection, so
+    // a short slice ending never hands it back to an older, still-sounding
+    // one, and manual pad selection is not overridden between triggers. While
+    // a gesture is active the serial is left unconsumed so the trigger still
+    // lands once the gesture ends.
+    const auto serial = engine.uiTriggerSerial.load (std::memory_order_relaxed);
+    if (serial != lastTriggerSerial && ! sliceLane.isGestureActive())
+    {
+        lastTriggerSerial = serial;
+        const auto newest = engine.uiSectionIndex.load (std::memory_order_relaxed);
+        if (newest >= 0)
+            selectSection (newest);
+    }
 
     // The lane shows its own section's playhead whenever that slice sounds,
     // even if it is not the newest voice.

@@ -95,8 +95,11 @@ republishing.
 - **UI** (`src/PluginEditor.cpp`, `src/ui/`): editor listens to the processor
   (`ChangeBroadcaster`) and pulls model snapshots; a 30 Hz timer reads the
   engine's per-voice playback atomics (`uiVoices`) — the main wave and pads
-  show ALL playing slices; `uiSectionIndex` (newest voice) drives only the
-  last-triggered lane selection. Always exactly two waveforms on screen: the main
+  show ALL playing slices; `uiSectionIndex` + `uiTriggerSerial` (stamped at
+  note-on) drive only the last-triggered lane selection, edge-wise: the editor
+  applies the section only when the serial advances, so only a new trigger
+  moves the selection — a voice ending never hands it back to an older,
+  still-sounding slice, and manual pad selection is not overridden. Always exactly two waveforms on screen: the main
   `WaveDisplay` (markers: click adds, drag moves linked boundaries,
   double-click removes, wheel zooms — the ONLY place section boundaries are
   edited) and ONE `SliceLane` bound to the selected slice — first by default,

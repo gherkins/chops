@@ -272,7 +272,8 @@ int main (int argc, char* argv[])
 
         EXPECT (std::abs (out.getSample (0, 0)) < std::abs (kLeftValue));
         EXPECT (out.getSample (0, 200) == 0.0f);   // 3 ms @ 44.1k = 133 frames
-        EXPECT (engine.uiPositionFrames.load() == -1.0);
+        for (const auto& slot : engine.uiVoices)
+            EXPECT (slot.section.load() == -1);    // all voices retired
     }
 
     // --- mono per section: retrigger cuts predecessor, no doubling ---
@@ -749,7 +750,35 @@ int main (int argc, char* argv[])
 
         std::sort (playing.begin(), playing.end());
         EXPECT (playing == (std::vector<int> { 0, 1 }));
-        EXPECT (polyEngine.uiSectionIndex.load() == 1);   // newest voice
+        EXPECT (polyEngine.uiSectionIndex.load() == 1);       // last triggered
+        EXPECT (polyEngine.uiTriggerSerial.load() == 2);
+
+        // Sticky selection: retrigger the shorter section 0 (20000 frames vs
+        // section 1's 24100), then run past its end while section 1 still
+        // sounds. The selection must stay on the last-triggered slice — a
+        // voice ending is not a trigger.
+        juce::MidiBuffer retrig;
+        addNoteOn (retrig, 36, 0);
+        block.clear();
+        polyEngine.process (block, retrig);
+        EXPECT (polyEngine.uiSectionIndex.load() == 0);
+        EXPECT (polyEngine.uiTriggerSerial.load() == 3);
+
+        juce::MidiBuffer empty;
+        for (int i = 0; i < 40; ++i)
+        {
+            block.clear();
+            polyEngine.process (block, empty);
+        }
+
+        std::vector<int> remaining;
+        for (const auto& slot : polyEngine.uiVoices)
+            if (const auto section = slot.section.load(); section >= 0)
+                remaining.push_back (section);
+
+        EXPECT (remaining == (std::vector<int> { 1 }));       // section 0 ended
+        EXPECT (polyEngine.uiSectionIndex.load() == 0);       // no jump back
+        EXPECT (polyEngine.uiTriggerSerial.load() == 3);
     }
 
     // --- gap healing: states saved before boundaries became main-wave-only

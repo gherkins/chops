@@ -81,9 +81,13 @@ void Engine::startSectionVoice (const Document& doc, int sectionIdx, int note, f
     p.reverse = sec.reverse;
     p.xfadeFrames = sec.xfadeFrames;
 
+    const auto serial = nextSerial++;
     target->start (makeSampleView (smp), p,
                    resolveFx (sec, doc.global, smp.sourceSampleRate, hostRate),
-                   note, velocity, hostRate, sectionIdx, nextSerial++);
+                   note, velocity, hostRate, sectionIdx, serial);
+
+    uiSectionIndex.store (sectionIdx, std::memory_order_relaxed);
+    uiTriggerSerial.store (serial, std::memory_order_relaxed);
 }
 
 void Engine::handleMidi (const Document* doc, const juce::uint8* data, int numBytes) noexcept
@@ -188,9 +192,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
 
     renderSpan (buffer, pos, total - pos);
 
-    // Publish every voice for the UI: all playing sections/playheads, plus
-    // the newest voice for the last-triggered lane selection.
-    const Voice* newest = nullptr;
+    // Publish every voice for the UI: all playing sections and playheads.
     for (size_t i = 0; i < voices.size(); ++i)
     {
         const auto& v = voices[i];
@@ -198,14 +200,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
                                    std::memory_order_relaxed);
         uiVoices[i].frame.store (v.isActive() ? v.position() : -1.0,
                                  std::memory_order_relaxed);
-        if (v.isActive() && (newest == nullptr || v.serial() > newest->serial()))
-            newest = &v;
     }
-
-    uiSectionIndex.store (newest != nullptr ? newest->sectionIndex() : -1,
-                          std::memory_order_relaxed);
-    uiPositionFrames.store (newest != nullptr ? newest->position() : -1.0,
-                            std::memory_order_relaxed);
 
     swap.endBlock();
 }
