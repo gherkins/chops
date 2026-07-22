@@ -20,6 +20,8 @@ SliceLane::SliceLane()
     {
         addAndMakeVisible (*b);
         b->setClickingTogglesState (false);
+        b->setColour (juce::TextButton::buttonOnColourId, kWave);
+        b->setColour (juce::TextButton::textColourOnId, kHeaderBg);
     }
     addAndMakeVisible (reverseButton);
 

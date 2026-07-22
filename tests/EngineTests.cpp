@@ -2,6 +2,7 @@
 // GUI: pure Document -> Engine -> buffer processing, run by ctest.
 
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_data_structures/juce_data_structures.h>
 
 #include "../src/engine/Engine.h"
 #include "../src/model/Document.h"
@@ -79,8 +80,112 @@ static void addNoteOff (juce::MidiBuffer& midi, int note, int samplePosition)
     midi.addEvent (juce::MidiMessage::noteOff (1, note), samplePosition);
 }
 
-int main()
+// Dev tool: synthesize a drum-loop-ish sample, slice it, give slice 0 a loop,
+// and write the standalone app's settings file so the full UI can be driven
+// and screenshotted without manual drag & drop.
+//   chops_tests --make-standalone-state <settings-file-path>
+static int makeStandaloneState (const juce::File& settingsFile)
 {
+    constexpr int frames = 2 * 44100;
+    juce::AudioBuffer<float> buffer (2, frames);
+    buffer.clear();
+
+    juce::Random random (42);
+    for (int hit = 0; hit < 8; ++hit)
+    {
+        const int start = hit * frames / 8;
+        const float base = hit % 4 == 0 ? 0.9f : 0.55f;
+        for (int i = 0; i < 6000 && start + i < frames; ++i)
+        {
+            const float env = base * std::exp (-6.0f * (float) i / 6000.0f);
+            const float tone = std::sin (0.03f * (float) i) * 0.5f;
+            for (int ch = 0; ch < 2; ++ch)
+                buffer.setSample (ch, start + i,
+                                  env * (tone + random.nextFloat() * 0.9f - 0.45f));
+        }
+    }
+
+    const auto wav = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                         .getChildFile ("chops_demo_loop.wav");
+    wav.deleteFile();
+    {
+        juce::WavAudioFormat format;
+        std::unique_ptr<juce::OutputStream> stream (wav.createOutputStream());
+        auto writer = format.createWriterFor (stream,
+                                              juce::AudioFormatWriterOptions{}
+                                                  .withSampleRate (44100.0)
+                                                  .withNumChannels (2)
+                                                  .withBitsPerSample (16));
+        if (writer == nullptr || ! writer->writeFromAudioSampleBuffer (buffer, 0, frames))
+            return 1;
+    }
+
+    juce::String error;
+    chops::Document doc;
+    doc.sample = chops::state::loadSampleFile (wav, error);
+    if (doc.sample == nullptr)
+        return 1;
+
+    chops::edits::autoSliceEqual (doc, 4);
+    chops::edits::setSectionMode (doc, 0, chops::PlayMode::LoopRun);
+    chops::edits::setSectionLoop (doc, 0, 4000, 12000);
+    chops::edits::setSectionReverse (doc, 2, true);
+    chops::edits::setSectionDriveOverride (doc, 3, 0.6f);
+
+    juce::MemoryBlock state;
+    chops::state::toMemory (doc, state);
+
+    juce::PropertiesFile::Options options;
+    options.applicationName = "chops";
+    options.filenameSuffix = ".settings";
+    options.osxLibrarySubFolder = "Application Support";
+    juce::PropertiesFile props (settingsFile, options);
+    props.setValue ("filterState", state.toBase64Encoding());
+    return props.save() ? 0 : 1;
+}
+
+// Dev tool: run a settings file back through the exact standalone restore path.
+static int verifyStandaloneState (const juce::File& settingsFile)
+{
+    juce::PropertiesFile::Options options;
+    options.applicationName = "chops";
+    options.filenameSuffix = ".settings";
+    options.osxLibrarySubFolder = "Application Support";
+    juce::PropertiesFile props (settingsFile, options);
+
+    const auto encoded = props.getValue ("filterState");
+    std::printf ("filterState chars: %d\n", encoded.length());
+
+    juce::MemoryBlock data;
+    if (! data.fromBase64Encoding (encoded) || data.getSize() == 0)
+    {
+        std::printf ("base64 decode FAILED\n");
+        return 1;
+    }
+    std::printf ("decoded bytes: %d\n", (int) data.getSize());
+
+    juce::String error;
+    auto doc = chops::state::fromMemory (data.getData(), data.getSize(), error);
+    if (doc == nullptr)
+    {
+        std::printf ("fromMemory FAILED: %s\n", error.toRawUTF8());
+        return 1;
+    }
+
+    std::printf ("sample: %s, frames: %lld, sections: %d\n",
+                 doc->sample != nullptr ? "yes" : "NO",
+                 doc->sample != nullptr ? (long long) doc->sample->numFrames() : 0,
+                 (int) doc->sections.size());
+    return 0;
+}
+
+int main (int argc, char* argv[])
+{
+    if (argc == 3 && juce::String (argv[1]) == "--make-standalone-state")
+        return makeStandaloneState (juce::File (juce::String (argv[2])));
+    if (argc == 3 && juce::String (argv[1]) == "--verify-standalone-state")
+        return verifyStandaloneState (juce::File (juce::String (argv[2])));
+
     const auto wavFile = writeTestWav();
     EXPECT (wavFile.existsAsFile());
 
