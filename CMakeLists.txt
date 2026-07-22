@@ -27,7 +27,10 @@ juce_add_plugin(chops
 
 target_sources(chops PRIVATE
     src/PluginProcessor.cpp
-    src/PluginEditor.cpp)
+    src/PluginEditor.cpp
+    src/engine/Engine.cpp
+    src/engine/Voice.cpp
+    src/state/State.cpp)
 
 target_compile_definitions(chops PUBLIC
     JUCE_WEB_BROWSER=0
@@ -43,3 +46,31 @@ target_link_libraries(chops
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# --- offline engine/state tests (no plugin wrapper) ---
+
+enable_testing()
+
+juce_add_console_app(chops_tests PRODUCT_NAME "chops_tests")
+
+target_sources(chops_tests PRIVATE
+    tests/EngineTests.cpp
+    src/engine/Engine.cpp
+    src/engine/Voice.cpp
+    src/state/State.cpp)
+
+target_compile_definitions(chops_tests PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_USE_FLAC=1)
+
+# No juce_recommended_warning_flags here: the tests assert bit-exact playback
+# and round-trips with float == on purpose.
+target_link_libraries(chops_tests
+    PRIVATE
+        juce::juce_audio_formats
+        juce::juce_data_structures
+    PUBLIC
+        juce::juce_recommended_config_flags)
+
+add_test(NAME chops_tests COMMAND chops_tests)

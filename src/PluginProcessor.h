@@ -1,8 +1,13 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_devices/juce_audio_devices.h>
 
-class ChopsProcessor : public juce::AudioProcessor
+#include "engine/Engine.h"
+#include "model/Document.h"
+
+class ChopsProcessor : public juce::AudioProcessor,
+                       public juce::ChangeBroadcaster
 {
 public:
     ChopsProcessor();
@@ -30,6 +35,22 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // --- message-thread API for the editor ---
+    bool loadSampleFile (const juce::File& file);
+    std::shared_ptr<const chops::Document> document() const;
+    juce::String lastError() const;
+    void triggerPad (int midiNote, bool noteOn);   // UI click audition
+    chops::Engine& engine() noexcept               { return chopsEngine; }
+
 private:
+    void setModel (chops::Document&& newModel);
+
+    chops::Engine chopsEngine;
+    juce::MidiMessageCollector midiCollector;
+
+    mutable juce::CriticalSection modelLock;
+    std::shared_ptr<const chops::Document> model;
+    juce::String lastErrorMessage;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChopsProcessor)
 };
