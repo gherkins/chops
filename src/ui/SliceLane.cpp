@@ -17,11 +17,22 @@ SliceLane::SliceLane()
     for (auto* b : { &loopButton, &oneShotButton, &gateButton, &reverseButton })
     {
         addAndMakeVisible (*b);
-        b->setClickingTogglesState (false);
         b->setColour (juce::TextButton::buttonOnColourId, kWave);
         b->setColour (juce::TextButton::textColourOnId, kHeaderBg);
     }
     reverseButton.setClickingTogglesState (true);
+
+    // The mode buttons form one segmented three-way toggle: a shared radio
+    // group (exactly one always on) with connected edges so the segments
+    // render as a single element.
+    for (auto* b : { &loopButton, &oneShotButton, &gateButton })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (1);
+    }
+    loopButton.setConnectedEdges (juce::Button::ConnectedOnRight);
+    oneShotButton.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
+    gateButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
 
     loopButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::LoopRun); };
     oneShotButton.onClick = [this] { if (onSetMode) onSetMode (index, PlayMode::OneShot); };
@@ -139,11 +150,11 @@ void SliceLane::resized()
     auto nameRow = header.removeFromTop (18);
     reverseButton.setBounds (nameRow.removeFromRight (44));
 
-    auto modeRow = header.removeFromTop (22);
+    auto modeRow = header.removeFromTop (22).reduced (0, 1);
     const int buttonWidth = modeRow.getWidth() / 3;
-    loopButton.setBounds (modeRow.removeFromLeft (buttonWidth).reduced (1));
-    oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth).reduced (1));
-    gateButton.setBounds (modeRow.reduced (1));
+    loopButton.setBounds (modeRow.removeFromLeft (buttonWidth));
+    oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
+    gateButton.setBounds (modeRow);
 
     header.removeFromTop (2);
     // Cap the knob strip so a tall lane grows its waveform, not its knobs.
