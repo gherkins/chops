@@ -236,6 +236,7 @@ int main (int argc, char* argv[])
     EXPECT (restored->sections[0].end == kFrames);
     EXPECT (restored->sections[0].mode == chops::PlayMode::Gate);
     EXPECT (restored->sections[0].midiNote == 36);
+    EXPECT (restored->global.mono);                  // default: one choke group
 
     // Saving the restored document must reuse the embedded blob verbatim.
     juce::MemoryBlock stateB;
@@ -731,6 +732,7 @@ int main (int argc, char* argv[])
         d.sample = sample;
         chops::edits::clearSlices (d);
         EXPECT (chops::edits::splitAt (d, 20000));
+        d.global.mono = false;   // this test needs slices sounding together
 
         chops::Engine polyEngine;
         polyEngine.prepare (kRate, 512);
@@ -779,6 +781,48 @@ int main (int argc, char* argv[])
         EXPECT (remaining == (std::vector<int> { 1 }));       // section 0 ended
         EXPECT (polyEngine.uiSectionIndex.load() == 0);       // no jump back
         EXPECT (polyEngine.uiTriggerSerial.load() == 3);
+    }
+
+    // --- global mono (the default): one choke group across all slices ---
+    {
+        chops::Document d;
+        d.sample = sample;
+        chops::edits::clearSlices (d);
+        EXPECT (chops::edits::splitAt (d, 20000));
+        EXPECT (d.global.mono);
+
+        chops::Engine monoEngine;
+        monoEngine.prepare (kRate, 512);
+        monoEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (2, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        addNoteOn (midi, 37, 100);
+        monoEngine.process (block, midi);
+
+        // Note 37 chokes note 36 even though it is a different slice. Past the
+        // 2 ms fade and the attack ramp exactly one voice sounds at full level
+        // (both slices play the same constant sample, so doubling would read
+        // 2x).
+        EXPECT (block.getSample (0, 400) == kLeftValue);
+        EXPECT (block.getSample (1, 400) == kRightValue);
+
+        std::vector<int> playing;
+        for (const auto& slot : monoEngine.uiVoices)
+            if (const auto section = slot.section.load(); section >= 0)
+                playing.push_back (section);
+        EXPECT (playing == (std::vector<int> { 1 }));         // section 0 choked
+
+        // Poly setting survives the state round trip.
+        d.global.mono = false;
+        juce::MemoryBlock polyState;
+        chops::state::toMemory (d, polyState);
+        auto restoredPoly = chops::state::fromMemory (polyState.getData(), polyState.getSize(), error);
+        EXPECT (restoredPoly != nullptr);
+        if (restoredPoly != nullptr)
+            EXPECT (! restoredPoly->global.mono);
     }
 
     // --- gap healing: states saved before boundaries became main-wave-only

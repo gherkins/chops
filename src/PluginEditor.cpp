@@ -31,6 +31,32 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     addAndMakeVisible (transientButton);
     addAndMakeVisible (clearButton);
     addAndMakeVisible (cropButton);
+    addAndMakeVisible (polyButton);
+    addAndMakeVisible (monoButton);
+
+    for (auto* b : { &polyButton, &monoButton })
+    {
+        b->setClickingTogglesState (true);
+        b->setRadioGroupId (1);
+    }
+    polyButton.setConnectedEdges (juce::Button::ConnectedOnRight);
+    monoButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
+
+    // One handler for both: turning a radio button on also click-notifies the
+    // sibling being turned off, so each click can fire twice. Reading the
+    // final toggle state and skipping no-op edits keeps it to one publish.
+    const auto sendVoiceMode = [this]
+    {
+        applyEdit ([mono = monoButton.getToggleState()] (chops::Document& d)
+        {
+            if (d.global.mono == mono)
+                return false;
+            d.global.mono = mono;
+            return true;
+        });
+    };
+    polyButton.onClick = sendVoiceMode;
+    monoButton.onClick = sendVoiceMode;
 
     for (const int count : { 2, 4, 8, 16, 32 })
         sliceCountBox.addItem (juce::String (count), count);
@@ -195,6 +221,8 @@ void ChopsEditor::refreshFromModel()
     globalPitch.setValue (g.pitchSemis, juce::dontSendNotification);
     globalFine.setValue (g.fineCents, juce::dontSendNotification);
     globalGain.setValue (g.gain, juce::dontSendNotification);
+    monoButton.setToggleState (g.mono, juce::dontSendNotification);
+    polyButton.setToggleState (! g.mono, juce::dontSendNotification);
 
     if (doc->sample != peaksBuiltFor)
     {
@@ -298,6 +326,9 @@ void ChopsEditor::resized()
     clearButton.setBounds (buttonRow.removeFromLeft (64));
     buttonRow.removeFromLeft (4);
     cropButton.setBounds (buttonRow.removeFromLeft (64));
+    buttonRow.removeFromLeft (12);
+    polyButton.setBounds (buttonRow.removeFromLeft (48));
+    monoButton.setBounds (buttonRow.removeFromLeft (48));
 
     auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (15);
     for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })

@@ -54,6 +54,7 @@ struct GlobalParams
     float fineCents = 0.0f;
     float gain = 1.0f;
     int rootNote = 36;                    // C1, pad-controller convention
+    bool mono = true;                     // one choke group across all slices
 };
 
 // The full instrument model. Immutable once published to the audio thread:

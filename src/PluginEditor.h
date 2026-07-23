@@ -45,6 +45,8 @@ private:
     juce::TextButton transientButton { "transients" };
     juce::TextButton clearButton { "clear" };
     juce::TextButton cropButton { "crop" };
+    juce::TextButton polyButton { "poly" };
+    juce::TextButton monoButton { "mono" };
     juce::Slider globalSr, globalDrive, globalPitch, globalFine, globalGain;
 
     bool dragOver = false;

@@ -44,9 +44,11 @@ static VoiceFx resolveFx (const Section& sec, const GlobalParams& g,
 
 void Engine::startSectionVoice (const Document& doc, int sectionIdx, int note, float velocity) noexcept
 {
-    // Mono per section: a retrigger cuts its own predecessor with a fast fade.
+    // Choke: in mono mode every slice shares one group, so any note-on cuts
+    // all running voices; in poly mode a retrigger only cuts its own
+    // predecessor (mono per section).
     for (auto& v : voices)
-        if (v.isActive() && v.sectionIndex() == sectionIdx)
+        if (v.isActive() && (doc.global.mono || v.sectionIndex() == sectionIdx))
             v.fastFade();
 
     Voice* target = nullptr;

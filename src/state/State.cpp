@@ -157,6 +157,7 @@ void toMemory (const Document& doc, juce::MemoryBlock& dest)
     root.setProperty ("fineCents", g.fineCents, nullptr);
     root.setProperty ("gain", g.gain, nullptr);
     root.setProperty ("rootNote", g.rootNote, nullptr);
+    root.setProperty ("mono", g.mono, nullptr);
 
     if (doc.sample != nullptr)
     {
@@ -197,6 +198,7 @@ std::unique_ptr<Document> fromMemory (const void* data, size_t size, juce::Strin
     g.fineCents = root.getProperty ("fineCents", 0.0f);
     g.gain = root.getProperty ("gain", 1.0f);
     g.rootNote = root.getProperty ("rootNote", 36);
+    g.mono = root.getProperty ("mono", true);
 
     if (auto s = root.getChildWithName ("Sample"); s.isValid())
     {
