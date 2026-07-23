@@ -338,8 +338,10 @@ void ChopsEditor::resized()
     polyButton.setBounds (buttonRow.removeFromLeft (48));
     monoButton.setBounds (buttonRow.removeFromLeft (48));
 
+    // Same reading order as the slice lane's knob grid: pitch, fine, drive,
+    // gain, sr.
     auto knobArea = topBar.removeFromRight (5 * chops::ui::kKnobW).withHeight (chops::ui::kKnobH);
-    for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
+    for (auto* k : { &globalPitch, &globalFine, &globalDrive, &globalGain, &globalSr })
         k->setBounds (knobArea.removeFromLeft (chops::ui::kKnobW));
 
     bounds.removeFromTop (8);
@@ -364,8 +366,8 @@ void ChopsEditor::paint (juce::Graphics& g)
     g.setFont (chops::ui::kFontLabel);
     {
         const std::pair<const juce::Slider*, const char*> labels[] =
-            { { &globalSr, "sr" }, { &globalDrive, "drive" }, { &globalPitch, "pitch" },
-              { &globalFine, "fine" }, { &globalGain, "gain" } };
+            { { &globalPitch, "pitch" }, { &globalFine, "fine" }, { &globalDrive, "drive" },
+              { &globalGain, "gain" }, { &globalSr, "sr" } };
         for (const auto& [knob, text] : labels)
             g.drawText (text,
                         knob->getBounds().withY (knob->getBottom())

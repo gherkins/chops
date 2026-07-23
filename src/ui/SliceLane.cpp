@@ -187,11 +187,11 @@ void SliceLane::resized()
     auto knobRow = knobCol.removeFromTop (ui::kKnobH);
     pitchKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
     fineKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
-    srKnob.setBounds (knobRow);
     knobCol.removeFromTop (ui::kKnobLabelH);
     knobRow = knobCol.removeFromTop (ui::kKnobH);
     driveKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
     gainKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
+    srKnob.setBounds (knobRow);
 
     // All seven buttons share one size, one vertical rhythm and three columns.
     const int buttonWidth = block.getWidth() / 3;
