@@ -57,7 +57,8 @@ SliceLane::SliceLane()
     ui::configureMiniKnob (fineKnob, -100.0, 100.0, 0.0, 1.0);
     ui::configureMiniKnob (srKnob, 300.0, 48000.0, 48000.0, 0.0, 4000.0, 0);
     ui::configureMiniKnob (driveKnob, -0.05, 1.0, -0.05);
-    for (auto* k : { &pitchKnob, &fineKnob, &srKnob, &driveKnob })
+    ui::configureMiniKnob (gainKnob, 0.0, 2.0, 1.0);
+    for (auto* k : { &pitchKnob, &fineKnob, &srKnob, &driveKnob, &gainKnob })
         addAndMakeVisible (*k);
 
     const auto sendPitch = [this]
@@ -78,6 +79,11 @@ SliceLane::SliceLane()
         const auto v = (float) driveKnob.getValue();
         if (onSetDrive)
             onSetDrive (index, v < 0.0f ? -1.0f : v);
+    };
+    gainKnob.onValueChange = [this]
+    {
+        if (onSetGain)
+            onSetGain (index, (float) gainKnob.getValue());
     };
 }
 
@@ -116,6 +122,7 @@ void SliceLane::bind (int sectionIndex, std::shared_ptr<const Document> newDoc, 
                          juce::dontSendNotification);
         driveKnob.setValue (sec->driveOverride >= 0.0f ? sec->driveOverride : -0.05,
                             juce::dontSendNotification);
+        gainKnob.setValue (sec->gain, juce::dontSendNotification);
     }
 
     repaint();
@@ -191,11 +198,12 @@ void SliceLane::resized()
     auto knobRow = header.withTrimmedBottom (15);
     if (knobRow.getHeight() > 54)
         knobRow = knobRow.removeFromTop (54);
-    const int knobWidth = knobRow.getWidth() / 4;
+    const int knobWidth = knobRow.getWidth() / 5;
     pitchKnob.setBounds (knobRow.removeFromLeft (knobWidth));
     fineKnob.setBounds (knobRow.removeFromLeft (knobWidth));
     srKnob.setBounds (knobRow.removeFromLeft (knobWidth));
-    driveKnob.setBounds (knobRow);
+    driveKnob.setBounds (knobRow.removeFromLeft (knobWidth));
+    gainKnob.setBounds (knobRow);
 }
 
 void SliceLane::paint (juce::Graphics& g)
@@ -241,14 +249,12 @@ void SliceLane::paint (juce::Graphics& g)
     // Knob labels.
     g.setColour (juce::Colours::whitesmoke.withAlpha (0.55f));
     g.setFont (ui::kFontLabel);
-    static const char* const knobLabels[] = { "pitch", "fine", "sr", "drive" };
-    for (int k = 0; k < 4; ++k)
-    {
-        const auto* knob = k == 0 ? &pitchKnob : k == 1 ? &fineKnob : k == 2 ? &srKnob : &driveKnob;
+    static const char* const knobLabels[] = { "pitch", "fine", "sr", "drive", "gain" };
+    const juce::Slider* const knobs[] = { &pitchKnob, &fineKnob, &srKnob, &driveKnob, &gainKnob };
+    for (int k = 0; k < 5; ++k)
         g.drawText (knobLabels[k],
-                    knob->getBounds().withY (knob->getBottom()).withHeight (14),
+                    knobs[k]->getBounds().withY (knobs[k]->getBottom()).withHeight (14),
                     juce::Justification::centred);
-    }
 
     const auto area = waveBounds().toFloat();
     const auto& buffer = doc->sample->buffer;

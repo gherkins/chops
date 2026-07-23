@@ -131,6 +131,7 @@ static int makeStandaloneState (const juce::File& settingsFile)
     chops::edits::setSectionLoop (doc, 0, 4000, 12000);
     chops::edits::setSectionReverse (doc, 2, true);
     chops::edits::setSectionDriveOverride (doc, 3, 0.6f);
+    chops::edits::setSectionGain (doc, 1, 1.5f);
 
     juce::MemoryBlock state;
     chops::state::toMemory (doc, state);
@@ -953,6 +954,40 @@ int main (int argc, char* argv[])
 
         const float expected = std::tanh (8.0f * 0.5f) / std::tanh (8.0f);
         EXPECT (std::abs (block.getSample (0, 100) - expected) < 1.0e-5f);
+    }
+
+    {
+        // Per-slice gain multiplies the global gain. The identity ramp keeps
+        // the product bit-exact past the 32-frame attack: 0.5 * 0.5 * ramp(i).
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::OneShot;
+        d.global.gain = 0.5f;
+        EXPECT (chops::edits::setSectionGain (d, 0, 0.5f));
+        EXPECT (! chops::edits::setSectionGain (d, 5, 0.5f));
+        EXPECT (chops::edits::setSectionGain (d, 0, 9.0f));   // clamped to 2
+        EXPECT (d.sections[0].gain == 2.0f);
+        EXPECT (chops::edits::setSectionGain (d, 0, 0.5f));
+
+        chops::Engine gainEngine;
+        gainEngine.prepare (kRate, 512);
+        gainEngine.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (1, 512);
+        block.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0);
+        gainEngine.process (block, midi);
+
+        EXPECT (block.getSample (0, 100) == 0.25f * 100.0f);
+        EXPECT (block.getSample (0, 400) == 0.25f * 400.0f);
     }
 
     wavFile.deleteFile();

@@ -53,5 +53,6 @@ bool setSectionReverse (Document& doc, int index, bool reverse);
 bool setSectionPitch (Document& doc, int index, int semis, float cents);
 bool setSectionSrOverride (Document& doc, int index, double hz);       // 0 = follow global
 bool setSectionDriveOverride (Document& doc, int index, float drive);  // < 0 = follow global
+bool setSectionGain (Document& doc, int index, float gain);            // 0..2, multiplies global
 
 } // namespace chops::edits

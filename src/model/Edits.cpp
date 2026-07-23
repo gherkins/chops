@@ -369,4 +369,13 @@ bool setSectionDriveOverride (Document& doc, int index, float drive)
     return true;
 }
 
+bool setSectionGain (Document& doc, int index, float gain)
+{
+    if (! validIndex (doc, index))
+        return false;
+
+    doc.sections[(size_t) index].gain = std::clamp (gain, 0.0f, 2.0f);
+    return true;
+}
+
 } // namespace chops::edits

@@ -29,6 +29,7 @@ public:
     std::function<void (int, int, float)> onSetPitch;      // semis, cents
     std::function<void (int, double)> onSetSr;             // Hz, 0 = follow global
     std::function<void (int, float)> onSetDrive;           // 0..1, -1 = follow global
+    std::function<void (int, float)> onSetGain;            // 0..2, multiplies global
     std::function<void (int midiNote, bool on)> onPad;
 
     SliceLane();
@@ -76,7 +77,7 @@ private:
     juce::TextButton loopButton { "loop" }, oneShotButton { "1shot" }, gateButton { "gate" };
     juce::TextButton loopFwdButton { "fwd" }, loopBackButton { "rev" }, loopPingPongButton { "pp" };
     juce::TextButton reverseButton { "rev" };   // toggle-styled like the mode row
-    juce::Slider pitchKnob, fineKnob, srKnob, driveKnob;
+    juce::Slider pitchKnob, fineKnob, srKnob, driveKnob, gainKnob;
 
     static constexpr int kEdgeHitPx = 6;
 };

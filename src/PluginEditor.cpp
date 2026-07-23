@@ -140,6 +140,11 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         applyEdit ([index, drive] (chops::Document& d)
                    { return chops::edits::setSectionDriveOverride (d, index, drive); });
     };
+    sliceLane.onSetGain = [this] (int index, float gain)
+    {
+        applyEdit ([index, gain] (chops::Document& d)
+                   { return chops::edits::setSectionGain (d, index, gain); });
+    };
     sliceLane.onPad = [this] (int note, bool on) { chopsProcessor.triggerPad (note, on); };
 
     // Global FX strip.
