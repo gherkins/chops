@@ -62,8 +62,12 @@ SliceLane::SliceLane()
     {
         addAndMakeVisible (*k);
         // The header panel is lighter than the editor background the top-bar
-        // knobs sit on; lift the idle arc so it keeps the same contrast.
+        // knobs sit on; lift the idle arc so it keeps the same contrast. The
+        // value arc gets the same colour — on this palette the swept track
+        // reads as ring background too (sr at max covers the whole ring).
         k->setColour (juce::Slider::rotarySliderOutlineColourId,
+                      juce::Colours::whitesmoke.withAlpha (0.25f));
+        k->setColour (juce::Slider::rotarySliderFillColourId,
                       juce::Colours::whitesmoke.withAlpha (0.25f));
     }
 
