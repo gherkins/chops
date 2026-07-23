@@ -185,12 +185,15 @@ void SliceLane::resized()
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
     // The header is one aligned single-column grid, centred vertically: three
-    // button rows stacked over one five-knob row (same order as the top bar),
-    // with equal gaps between the rows.
+    // button rows stacked over one five-knob row (same order as the top bar).
+    // Small gaps around the name and knob rows; the mode → direction gap gets
+    // a bigger share so the loop connector tree has air.
     const int rowsHeight = 3 * 22 + ui::kKnobH + ui::kKnobLabelH;
-    const int rowGap = juce::jlimit (0, 8, (header.getHeight() - rowsHeight) / 3);
+    const int leftover = header.getHeight() - rowsHeight;
+    const int rowGap = juce::jlimit (0, 8, leftover / 4);
+    const int treeGap = juce::jlimit (rowGap, 18, leftover - 2 * rowGap);
     auto block = header.withSizeKeepingCentre (header.getWidth(),
-                                               rowsHeight + 3 * rowGap);
+                                               rowsHeight + 2 * rowGap + treeGap);
 
     // All seven buttons share one size, one vertical rhythm and three columns.
     const int buttonWidth = block.getWidth() / 3;
@@ -206,7 +209,7 @@ void SliceLane::resized()
 
     // paint() draws a connector tree from the loop segment down into all
     // three direction segments through this gap.
-    block.removeFromTop (rowGap);
+    block.removeFromTop (treeGap);
     auto loopDirRow = block.removeFromTop (22).reduced (0, 1);
     loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
