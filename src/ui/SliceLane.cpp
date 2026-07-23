@@ -59,7 +59,13 @@ SliceLane::SliceLane()
     ui::configureMiniKnob (driveKnob, -0.05, 1.0, -0.05);
     ui::configureMiniKnob (gainKnob, 0.0, 2.0, 1.0);
     for (auto* k : { &pitchKnob, &fineKnob, &srKnob, &driveKnob, &gainKnob })
+    {
         addAndMakeVisible (*k);
+        // The header panel is lighter than the editor background the top-bar
+        // knobs sit on; lift the idle arc so it keeps the same contrast.
+        k->setColour (juce::Slider::rotarySliderOutlineColourId,
+                      juce::Colours::whitesmoke.withAlpha (0.25f));
+    }
 
     const auto sendPitch = [this]
     {
