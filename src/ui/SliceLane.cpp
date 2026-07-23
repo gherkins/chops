@@ -9,6 +9,7 @@ namespace chops
 
 static const juce::Colour kPanel { 0xff22242a };
 static const juce::Colour kHeaderBg { 0xff1c1e24 };
+static const juce::Colour kBackground { 0xff17181c };   // editor window background
 static const juce::Colour kWave { 0xff5ec8a8 };
 static const juce::Colour kLoop { 0xff7ab8ff };
 
@@ -164,7 +165,7 @@ void SliceLane::setPlayhead (bool activeNow, double frame)
 
 juce::Rectangle<int> SliceLane::waveBounds() const
 {
-    return getLocalBounds().withTrimmedLeft (kHeaderWidth).reduced (0, 2);
+    return getLocalBounds().withTrimmedLeft (kHeaderWidth + kWaveGap).reduced (0, 2);
 }
 
 double SliceLane::frameToX (double frame) const
@@ -183,29 +184,16 @@ void SliceLane::resized()
 {
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
-    // The header is one aligned grid block, centred vertically: the three
-    // button rows on the left and the two knob rows (knob + label) on the
-    // right share their outer top and bottom lines, and the button rows are
-    // justified evenly between them.
-    const int blockHeight = 2 * (ui::kKnobH + ui::kKnobLabelH);
+    // The header is one aligned single-column grid, centred vertically: three
+    // button rows stacked over one five-knob row (same order as the top bar),
+    // with equal gaps between the rows.
+    const int rowsHeight = 3 * 22 + ui::kKnobH + ui::kKnobLabelH;
+    const int rowGap = juce::jlimit (0, 8, (header.getHeight() - rowsHeight) / 3);
     auto block = header.withSizeKeepingCentre (header.getWidth(),
-                                               juce::jmin (header.getHeight(), blockHeight));
-
-    auto knobCol = block.removeFromRight (3 * ui::kKnobW);
-    block.removeFromRight (10);
-
-    auto knobRow = knobCol.removeFromTop (ui::kKnobH);
-    pitchKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
-    fineKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
-    knobCol.removeFromTop (ui::kKnobLabelH);
-    knobRow = knobCol.removeFromTop (ui::kKnobH);
-    driveKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
-    gainKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
-    srKnob.setBounds (knobRow);
+                                               rowsHeight + 3 * rowGap);
 
     // All seven buttons share one size, one vertical rhythm and three columns.
     const int buttonWidth = block.getWidth() / 3;
-    const int rowGap = juce::jmax (0, (block.getHeight() - 3 * 22) / 2);
 
     nameArea = block.removeFromTop (22);
     reverseButton.setBounds (nameArea.removeFromRight (buttonWidth).reduced (0, 1));
@@ -223,6 +211,11 @@ void SliceLane::resized()
     loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopPingPongButton.setBounds (loopDirRow);
+
+    block.removeFromTop (rowGap);
+    auto knobRow = block.removeFromTop (ui::kKnobH);
+    for (auto* k : { &pitchKnob, &fineKnob, &driveKnob, &gainKnob, &srKnob })
+        k->setBounds (knobRow.removeFromLeft (ui::kKnobW));
 }
 
 void SliceLane::paint (juce::Graphics& g)
@@ -232,6 +225,10 @@ void SliceLane::paint (juce::Graphics& g)
     g.fillAll (kPanel);
     g.setColour (kHeaderBg);
     g.fillRect (getLocalBounds().removeFromLeft (kHeaderWidth));
+    // Window-background gap: header and wave read as two panels, separated
+    // like the components at the window borders.
+    g.setColour (kBackground);
+    g.fillRect (kHeaderWidth, 0, kWaveGap, getHeight());
 
     if (sec == nullptr || doc->sample == nullptr || peaks == nullptr)
         return;

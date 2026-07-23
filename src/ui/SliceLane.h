@@ -15,9 +15,9 @@ namespace chops
 class SliceLane : public juce::Component
 {
 public:
-    static constexpr int kHeight = 104;
-    // Button column (184) + gap + 3-wide knob grid (3 * ui::kKnobW) + margins.
-    static constexpr int kHeaderWidth = 350;
+    // Five-knob row (5 * ui::kKnobW) + margins; the button rows stack above
+    // it in three columns of the same overall width.
+    static constexpr int kHeaderWidth = 252;
 
     // All callbacks receive the section index this lane is bound to.
     // Section boundaries are edited in the main waveform only; the lane owns
@@ -82,6 +82,9 @@ private:
     juce::Slider pitchKnob, fineKnob, srKnob, driveKnob, gainKnob;
 
     static constexpr int kEdgeHitPx = 6;
+    // Editor-background gap between the header block and the wave — the same
+    // breathing room the editor leaves at the window borders.
+    static constexpr int kWaveGap = 12;
 };
 
 } // namespace chops
