@@ -38,6 +38,9 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     {
         b->setClickingTogglesState (true);
         b->setRadioGroupId (1);
+        // Same active styling as the lane's mode/loop toggles.
+        b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff5ec8a8));
+        b->setColour (juce::TextButton::textColourOnId, juce::Colour (0xff1c1e24));
     }
     polyButton.setConnectedEdges (juce::Button::ConnectedOnRight);
     monoButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
