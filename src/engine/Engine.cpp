@@ -104,7 +104,7 @@ void Engine::handleMidi (const Document* doc, const juce::uint8* data, int numBy
         if (doc != nullptr && doc->sample != nullptr)
         {
             const int note = data[1];
-            const float velocity = (float) data[2] / 127.0f;
+            const float velocity = doc->global.velSensitive ? (float) data[2] / 127.0f : 1.0f;
 
             for (int i = 0; i < (int) doc->sections.size(); ++i)
                 if (doc->sections[(size_t) i].midiNote == note)

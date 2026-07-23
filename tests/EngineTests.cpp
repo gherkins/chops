@@ -238,6 +238,7 @@ int main (int argc, char* argv[])
     EXPECT (restored->sections[0].mode == chops::PlayMode::Gate);
     EXPECT (restored->sections[0].midiNote == 36);
     EXPECT (restored->global.mono);                  // default: one choke group
+    EXPECT (! restored->global.velSensitive);        // default: fixed full level
 
     // Saving the restored document must reuse the embedded blob verbatim.
     juce::MemoryBlock stateB;
@@ -295,6 +296,36 @@ int main (int argc, char* argv[])
         for (int i = 0; i < 512; ++i)
             peak = std::max (peak, std::abs (out.getSample (0, i)));
         EXPECT (peak <= kLeftValue * 2.0f + 1.0e-6f);
+    }
+
+    // --- velocity: ignored by default, honoured with velSensitive on ---
+    {
+        out.clear();
+        juce::MidiBuffer midi;
+        addNoteOn (midi, 36, 0, 64);
+        engine.process (out, midi);
+
+        EXPECT (out.getSample (0, 400) == kLeftValue);
+        EXPECT (out.getSample (1, 400) == kRightValue);
+
+        auto velDoc = doc;
+        velDoc.global.velSensitive = true;
+        engine.publishDocument (std::make_unique<const chops::Document> (velDoc));
+
+        out.clear();
+        juce::MidiBuffer midi2;
+        addNoteOn (midi2, 36, 0, 64);
+        engine.process (out, midi2);
+
+        // Exact: DC playback times the single-multiply velocity gain.
+        EXPECT (out.getSample (0, 400) == kLeftValue * (64.0f / 127.0f));
+        EXPECT (out.getSample (1, 400) == kRightValue * (64.0f / 127.0f));
+
+        engine.publishDocument (std::make_unique<const chops::Document> (doc));
+        out.clear();
+        juce::MidiBuffer off;
+        addNoteOff (off, 36, 0);
+        engine.process (out, off);
     }
 
     // --- slicing edits: split / linked move / remove / auto-slice ---

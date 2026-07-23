@@ -47,6 +47,7 @@ private:
     juce::TextButton cropButton { "crop" };
     juce::TextButton polyButton { "poly" };
     juce::TextButton monoButton { "mono" };
+    juce::TextButton velButton { "vel" };
     juce::Slider globalSr, globalDrive, globalPitch, globalFine, globalGain;
 
     bool dragOver = false;

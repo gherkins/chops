@@ -33,6 +33,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     addAndMakeVisible (cropButton);
     addAndMakeVisible (polyButton);
     addAndMakeVisible (monoButton);
+    addAndMakeVisible (velButton);
 
     for (auto* b : { &polyButton, &monoButton })
     {
@@ -42,6 +43,9 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff5ec8a8));
         b->setColour (juce::TextButton::textColourOnId, juce::Colour (0xff1c1e24));
     }
+    velButton.setClickingTogglesState (true);
+    velButton.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff5ec8a8));
+    velButton.setColour (juce::TextButton::textColourOnId, juce::Colour (0xff1c1e24));
     polyButton.setConnectedEdges (juce::Button::ConnectedOnRight);
     monoButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
 
@@ -60,6 +64,17 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
     };
     polyButton.onClick = sendVoiceMode;
     monoButton.onClick = sendVoiceMode;
+
+    velButton.onClick = [this]
+    {
+        applyEdit ([on = velButton.getToggleState()] (chops::Document& d)
+        {
+            if (d.global.velSensitive == on)
+                return false;
+            d.global.velSensitive = on;
+            return true;
+        });
+    };
 
     for (const int count : { 2, 4, 8, 16, 32 })
         sliceCountBox.addItem (juce::String (count), count);
@@ -231,6 +246,7 @@ void ChopsEditor::refreshFromModel()
     globalGain.setValue (g.gain, juce::dontSendNotification);
     monoButton.setToggleState (g.mono, juce::dontSendNotification);
     polyButton.setToggleState (! g.mono, juce::dontSendNotification);
+    velButton.setToggleState (g.velSensitive, juce::dontSendNotification);
 
     if (doc->sample != peaksBuiltFor)
     {
@@ -337,6 +353,8 @@ void ChopsEditor::resized()
     buttonRow.removeFromLeft (12);
     polyButton.setBounds (buttonRow.removeFromLeft (48));
     monoButton.setBounds (buttonRow.removeFromLeft (48));
+    buttonRow.removeFromLeft (12);
+    velButton.setBounds (buttonRow.removeFromLeft (48));
 
     // Same reading order as the slice lane's knob grid: pitch, fine, drive,
     // gain, sr.
