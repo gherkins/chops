@@ -16,7 +16,8 @@ class SliceLane : public juce::Component
 {
 public:
     static constexpr int kHeight = 104;
-    static constexpr int kHeaderWidth = 196;
+    // Button column (184) + gap + 3-wide knob grid (3 * ui::kKnobW) + margins.
+    static constexpr int kHeaderWidth = 350;
 
     // All callbacks receive the section index this lane is bound to.
     // Section boundaries are edited in the main waveform only; the lane owns
@@ -66,6 +67,7 @@ private:
     const PeakCache* peaks = nullptr;
 
     double viewStart = 0.0, viewLength = 0.0;
+    juce::Rectangle<int> nameArea;    // grid name row (minus rev); set in resized()
     Drag drag = Drag::None;
     juce::int64 selectAnchor = 0;
     juce::int64 loopGrabOffset = 0;   // MoveLoop: grab frame relative to loopStart

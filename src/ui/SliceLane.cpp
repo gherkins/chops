@@ -173,37 +173,46 @@ void SliceLane::resized()
 {
     auto header = getLocalBounds().removeFromLeft (kHeaderWidth).reduced (6, 2);
 
-    // All seven buttons share one size and one vertical rhythm.
-    const int buttonWidth = header.getWidth() / 3;
+    // The header is one aligned grid block, centred vertically: the three
+    // button rows on the left and the two knob rows (knob + label) on the
+    // right share their outer top and bottom lines, and the button rows are
+    // justified evenly between them.
+    const int blockHeight = 2 * (ui::kKnobH + ui::kKnobLabelH);
+    auto block = header.withSizeKeepingCentre (header.getWidth(),
+                                               juce::jmin (header.getHeight(), blockHeight));
 
-    auto nameRow = header.removeFromTop (22);
-    reverseButton.setBounds (nameRow.removeFromRight (buttonWidth).reduced (0, 1));
+    auto knobCol = block.removeFromRight (3 * ui::kKnobW);
+    block.removeFromRight (10);
 
-    header.removeFromTop (6);
-    auto modeRow = header.removeFromTop (22).reduced (0, 1);
+    auto knobRow = knobCol.removeFromTop (ui::kKnobH);
+    pitchKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
+    fineKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
+    srKnob.setBounds (knobRow);
+    knobCol.removeFromTop (ui::kKnobLabelH);
+    knobRow = knobCol.removeFromTop (ui::kKnobH);
+    driveKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
+    gainKnob.setBounds (knobRow.removeFromLeft (ui::kKnobW));
+
+    // All seven buttons share one size, one vertical rhythm and three columns.
+    const int buttonWidth = block.getWidth() / 3;
+    const int rowGap = juce::jmax (0, (block.getHeight() - 3 * 22) / 2);
+
+    nameArea = block.removeFromTop (22);
+    reverseButton.setBounds (nameArea.removeFromRight (buttonWidth).reduced (0, 1));
+
+    block.removeFromTop (rowGap);
+    auto modeRow = block.removeFromTop (22).reduced (0, 1);
     loopButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     oneShotButton.setBounds (modeRow.removeFromLeft (buttonWidth));
     gateButton.setBounds (modeRow);
 
-    // Aligned with the mode row; paint() draws a connector tree from the loop
-    // segment down into all three direction segments through this gap.
-    header.removeFromTop (6);
-    auto loopDirRow = header.removeFromTop (22).reduced (0, 1);
+    // paint() draws a connector tree from the loop segment down into all
+    // three direction segments through this gap.
+    block.removeFromTop (rowGap);
+    auto loopDirRow = block.removeFromTop (22).reduced (0, 1);
     loopFwdButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopBackButton.setBounds (loopDirRow.removeFromLeft (buttonWidth));
     loopPingPongButton.setBounds (loopDirRow);
-
-    header.removeFromTop (2);
-    // Cap the knob strip so a tall lane grows its waveform, not its knobs.
-    auto knobRow = header.withTrimmedBottom (15);
-    if (knobRow.getHeight() > 54)
-        knobRow = knobRow.removeFromTop (54);
-    const int knobWidth = knobRow.getWidth() / 5;
-    pitchKnob.setBounds (knobRow.removeFromLeft (knobWidth));
-    fineKnob.setBounds (knobRow.removeFromLeft (knobWidth));
-    srKnob.setBounds (knobRow.removeFromLeft (knobWidth));
-    driveKnob.setBounds (knobRow.removeFromLeft (knobWidth));
-    gainKnob.setBounds (knobRow);
 }
 
 void SliceLane::paint (juce::Graphics& g)
@@ -217,12 +226,12 @@ void SliceLane::paint (juce::Graphics& g)
     if (sec == nullptr || doc->sample == nullptr || peaks == nullptr)
         return;
 
-    // Header: pad note name (click-and-hold on it auditions).
+    // Header: pad note name (click-and-hold on it auditions), on the grid's
+    // name row next to the rev toggle.
     g.setColour (active || padPressed ? kWave : juce::Colours::whitesmoke.withAlpha (0.85f));
     g.setFont (juce::Font (juce::FontOptions { ui::kFontTitle, juce::Font::bold }));
     g.drawText (juce::MidiMessage::getMidiNoteName (sec->midiNote, true, true, 3),
-                juce::Rectangle<int> (6, 2, kHeaderWidth - 12, 22),
-                juce::Justification::centredLeft);
+                nameArea, juce::Justification::centredLeft);
 
     // Connector tree: a stem from the loop mode segment splits into all three
     // direction segments, making the ownership obvious.
@@ -253,7 +262,7 @@ void SliceLane::paint (juce::Graphics& g)
     const juce::Slider* const knobs[] = { &pitchKnob, &fineKnob, &srKnob, &driveKnob, &gainKnob };
     for (int k = 0; k < 5; ++k)
         g.drawText (knobLabels[k],
-                    knobs[k]->getBounds().withY (knobs[k]->getBottom()).withHeight (14),
+                    knobs[k]->getBounds().withY (knobs[k]->getBottom()).withHeight (ui::kKnobLabelH),
                     juce::Justification::centred);
 
     const auto area = waveBounds().toFloat();

@@ -338,9 +338,9 @@ void ChopsEditor::resized()
     polyButton.setBounds (buttonRow.removeFromLeft (48));
     monoButton.setBounds (buttonRow.removeFromLeft (48));
 
-    auto knobArea = topBar.removeFromRight (5 * 48).withTrimmedBottom (15);
+    auto knobArea = topBar.removeFromRight (5 * chops::ui::kKnobW).withHeight (chops::ui::kKnobH);
     for (auto* k : { &globalSr, &globalDrive, &globalPitch, &globalFine, &globalGain })
-        k->setBounds (knobArea.removeFromLeft (48));
+        k->setBounds (knobArea.removeFromLeft (chops::ui::kKnobW));
 
     bounds.removeFromTop (8);
     auto info = bounds.removeFromBottom (22);
@@ -367,7 +367,9 @@ void ChopsEditor::paint (juce::Graphics& g)
             { { &globalSr, "sr" }, { &globalDrive, "drive" }, { &globalPitch, "pitch" },
               { &globalFine, "fine" }, { &globalGain, "gain" } };
         for (const auto& [knob, text] : labels)
-            g.drawText (text, knob->getBounds().withY (knob->getBottom()).withHeight (14),
+            g.drawText (text,
+                        knob->getBounds().withY (knob->getBottom())
+                            .withHeight (chops::ui::kKnobLabelH),
                         juce::Justification::centred);
     }
 
