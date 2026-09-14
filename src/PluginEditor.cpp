@@ -231,8 +231,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         applyEdit ([off] (chops::Document& d)
                    { return chops::edits::snapGlobalPitchToSemitone (d, off); });
         tunerReading.cents -= (float) off;
-        tuneRe = tuneIm = 0.0f;
-        tuneCount = 0;
+        tuneRingCount = tuneRingPos = 0;   // the window refills from the re-pitched output
         updateTunerText();
     };
     updateTunerText();
@@ -389,60 +388,74 @@ void ChopsEditor::analyseOutput (const std::vector<int>& playingSections)
     }
 
     // Only windows where the reference slice is all that sounds count, so
-    // other slices never bleed into its reading. Otherwise the latch holds.
-    if (ref < 0 || playingSections.empty() || chopsProcessor.getSampleRate() <= 0.0)
-        return;
+    // other slices never bleed into its reading. Anything else is silence
+    // for the tuner: the reading holds long enough to release a pad and
+    // click snap, then clears.
+    bool sounding = ref >= 0 && ! playingSections.empty() && chopsProcessor.getSampleRate() > 0.0;
     for (const int s : playingSections)
-        if (s != ref)
-            return;
+        sounding = sounding && s == ref;
 
-    engine.uiOutputTap.copyLatest (tunerWindow.data(), chops::tune::kWindow);
+    if (sounding)
+    {
+        engine.uiOutputTap.copyLatest (tunerWindow.data(), chops::tune::kWindow);
+        double energy = 0.0;
+        for (const float v : tunerWindow)
+            energy += (double) v * v;
+        sounding = std::sqrt (energy / (double) tunerWindow.size()) >= 1.0e-3;   // -60 dBFS
+    }
 
-    double energy = 0.0;
-    for (const float v : tunerWindow)
-        energy += (double) v * v;
-    if (std::sqrt (energy / (double) tunerWindow.size()) < 1.0e-3)   // < -60 dBFS
+    if (! sounding)
+    {
+        if (++tunerSilentTicks >= kTunerClearTicks && (tunerReading.valid || tuneRingCount > 0))
+            clearTunerReading();
         return;
+    }
+    tunerSilentTicks = 0;
 
     const auto r = chops::tune::analyse (tunerWindow.data(), chops::tune::kWindow,
                                          chopsProcessor.getSampleRate(), *tunerScratch);
     if (r.numPeaks < 3)
         return;
 
-    // Smooth the resultant vector across windows (a plain average of cents
-    // would break at the +-50 wrap), then decide on the smoothed length.
-    constexpr float alpha = 0.3f;
-    if (tuneCount == 0)
-    {
-        tuneRe = r.re;
-        tuneIm = r.im;
-    }
-    else
-    {
-        tuneRe += alpha * (r.re - tuneRe);
-        tuneIm += alpha * (r.im - tuneIm);
-    }
-    ++tuneCount;
+    // Rolling window of resultant vectors (a plain average of cents would
+    // break at the +-50 wrap): the reading follows the last ~3 s of output.
+    tuneRing[(size_t) tuneRingPos] = { r.re, r.im };
+    tuneRingPos = (tuneRingPos + 1) % kTunerRollTicks;
+    tuneRingCount = std::min (tuneRingCount + 1, kTunerRollTicks);
 
-    const float confidence = std::sqrt (tuneRe * tuneRe + tuneIm * tuneIm);
+    float re = 0.0f, im = 0.0f;
+    for (int i = 0; i < tuneRingCount; ++i)
+    {
+        re += tuneRing[(size_t) i].first;
+        im += tuneRing[(size_t) i].second;
+    }
+    re /= (float) tuneRingCount;
+    im /= (float) tuneRingCount;
+
+    const float confidence = std::sqrt (re * re + im * im);
     if (confidence < 0.6f)
         return;
 
     tunerReading.pitchClass = r.pitchClass;
-    tunerReading.cents = (float) (100.0 * std::atan2 (tuneIm, tuneRe) / (2.0 * juce::MathConstants<double>::pi));
+    tunerReading.cents = (float) (100.0 * std::atan2 (im, re) / (2.0 * juce::MathConstants<double>::pi));
     tunerReading.valid = true;
     snapButton.setEnabled (true);
     updateTunerText();
 }
 
-void ChopsEditor::resetTuner()
+void ChopsEditor::clearTunerReading()
 {
     tunerReading = {};
-    tunerRefSection = -1;
-    tuneRe = tuneIm = 0.0f;
-    tuneCount = 0;
+    tuneRingCount = tuneRingPos = 0;
+    tunerSilentTicks = 0;
     snapButton.setEnabled (false);
     updateTunerText();
+}
+
+void ChopsEditor::resetTuner()
+{
+    clearTunerReading();
+    tunerRefSection = -1;
 }
 
 void ChopsEditor::updateTunerText()

@@ -32,6 +32,7 @@ private:
     void selectSection (int sectionIndex);
     void analyseOutput (const std::vector<int>& playingSections);
     void resetTuner();
+    void clearTunerReading();
     void updateTunerText();
 
     ChopsProcessor& chopsProcessor;
@@ -60,8 +61,14 @@ private:
     std::vector<float> tunerWindow;
     std::unique_ptr<chops::tune::Scratch> tunerScratch;
     int tunerRefSection = -1;
-    float tuneRe = 0.0f, tuneIm = 0.0f;     // smoothed resultant on the 100-cent circle
-    int tuneCount = 0;
+    // Rolling window of per-tick resultants on the 100-cent circle (~3 s at
+    // 30 Hz, so chord changes in a loop average out); the reading clears
+    // after ~4 s without the reference sounding.
+    static constexpr int kTunerRollTicks = 90;
+    static constexpr int kTunerClearTicks = 120;
+    std::array<std::pair<float, float>, kTunerRollTicks> tuneRing {};
+    int tuneRingPos = 0, tuneRingCount = 0;
+    int tunerSilentTicks = 0;
     struct { int pitchClass = -1; float cents = 0.0f; bool valid = false; } tunerReading;
     juce::String tunerText;
     juce::Rectangle<int> tunerRect, infoRect;

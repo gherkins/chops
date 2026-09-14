@@ -94,8 +94,10 @@ republishing.
   the message thread at 30 Hz over the engine's CLEAN voice mix (post-pitch,
   pre sr-reduce/drive: those never move the pitch, they only add off-grid
   aliases and intermodulation), gated to windows where only the reference
-  slice sounds. Polyphonic-safe: magnitude-weighted circular mean of every
-  spectral peak's deviation from 12-TET; low confidence shows `--`.
+  slice sounds, as a ~3 s rolling window; it clears after ~4 s without the
+  reference sounding (long enough to release a pad and click snap).
+  Polyphonic-safe: magnitude-weighted circular mean of every spectral
+  peak's deviation from 12-TET; low confidence shows `--`.
 - **State** (`src/state/State.cpp`): flagship always-embed requirement. The
   compressed blob is built ONCE at sample load (already-compressed sources
   embedded verbatim; PCM re-encoded to FLAC at ≤24 bit) and reused byte-for-
