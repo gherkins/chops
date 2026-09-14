@@ -43,11 +43,19 @@ public:
     void triggerPad (int midiNote, bool noteOn);   // UI click audition
     chops::Engine& engine() noexcept               { return chopsEngine; }
 
+    // Host transport as last seen in processBlock (90 / 4/4 without a host
+    // playhead, e.g. the standalone). The tuner scales its hold time to bars.
+    double hostBpm() const noexcept                { return bpm.load (std::memory_order_relaxed); }
+    int hostTimeSigNumerator() const noexcept      { return tsNum.load (std::memory_order_relaxed); }
+    int hostTimeSigDenominator() const noexcept    { return tsDen.load (std::memory_order_relaxed); }
+
 private:
     void setModel (chops::Document&& newModel);
 
     chops::Engine chopsEngine;
     juce::MidiMessageCollector midiCollector;
+    std::atomic<double> bpm { 90.0 };
+    std::atomic<int> tsNum { 4 }, tsDen { 4 };
 
     mutable juce::CriticalSection modelLock;
     std::shared_ptr<const chops::Document> model;

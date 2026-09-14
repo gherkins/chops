@@ -61,12 +61,19 @@ private:
     std::vector<float> tunerWindow;
     std::unique_ptr<chops::tune::Scratch> tunerScratch;
     int tunerRefSection = -1;
-    // Rolling window of per-tick resultants on the 100-cent circle (~3 s at
-    // 30 Hz, so chord changes in a loop average out); the reading clears
-    // after ~4 s without the reference sounding.
-    static constexpr int kTunerRollTicks = 90;
-    static constexpr int kTunerClearTicks = 120;
-    std::array<std::pair<float, float>, kTunerRollTicks> tuneRing {};
+    // Rolling window of per-tick resultants on the 100-cent circle, at least
+    // kTunerRollSeconds and at least one bar at the host tempo, so a whole
+    // loop cycle averages out. The reading clears after kTunerHoldSeconds
+    // (and at least one bar) without the reference sounding: a single trigger
+    // stays readable for a bar, long enough to release a pad and click snap.
+    static constexpr double kTunerRollSeconds = 4.0;
+    static constexpr double kTunerHoldSeconds = 6.0;
+    static constexpr int kTunerTimerHz = 30;
+    static constexpr int kTunerRingMax = 30 * kTunerTimerHz;   // caps a bar at 30 s
+    int tunerRollTicks() const;
+    int tunerHoldTicks() const;
+    int tunerBarTicks() const;
+    std::array<std::pair<float, float>, kTunerRingMax> tuneRing {};
     int tuneRingPos = 0, tuneRingCount = 0;
     int tunerSilentTicks = 0;
     struct { int pitchClass = -1; float cents = 0.0f; bool valid = false; } tunerReading;

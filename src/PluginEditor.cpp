@@ -238,7 +238,7 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
 
     refreshFromModel();
     chopsProcessor.addChangeListener (this);
-    startTimerHz (30);
+    startTimerHz (kTunerTimerHz);
 }
 
 ChopsEditor::~ChopsEditor()
@@ -406,7 +406,7 @@ void ChopsEditor::analyseOutput (const std::vector<int>& playingSections)
 
     if (! sounding)
     {
-        if (++tunerSilentTicks >= kTunerClearTicks && (tunerReading.valid || tuneRingCount > 0))
+        if (++tunerSilentTicks >= tunerHoldTicks() && (tunerReading.valid || tuneRingCount > 0))
             clearTunerReading();
         return;
     }
@@ -418,19 +418,21 @@ void ChopsEditor::analyseOutput (const std::vector<int>& playingSections)
         return;
 
     // Rolling window of resultant vectors (a plain average of cents would
-    // break at the +-50 wrap): the reading follows the last ~3 s of output.
+    // break at the +-50 wrap): the reading follows the newest rollTicks.
     tuneRing[(size_t) tuneRingPos] = { r.re, r.im };
-    tuneRingPos = (tuneRingPos + 1) % kTunerRollTicks;
-    tuneRingCount = std::min (tuneRingCount + 1, kTunerRollTicks);
+    tuneRingPos = (tuneRingPos + 1) % kTunerRingMax;
+    tuneRingCount = std::min (tuneRingCount + 1, kTunerRingMax);
 
+    const int used = std::min (tuneRingCount, tunerRollTicks());
     float re = 0.0f, im = 0.0f;
-    for (int i = 0; i < tuneRingCount; ++i)
+    for (int i = 1; i <= used; ++i)
     {
-        re += tuneRing[(size_t) i].first;
-        im += tuneRing[(size_t) i].second;
+        const auto& entry = tuneRing[(size_t) ((tuneRingPos - i + kTunerRingMax) % kTunerRingMax)];
+        re += entry.first;
+        im += entry.second;
     }
-    re /= (float) tuneRingCount;
-    im /= (float) tuneRingCount;
+    re /= (float) used;
+    im /= (float) used;
 
     const float confidence = std::sqrt (re * re + im * im);
     if (confidence < 0.6f)
@@ -441,6 +443,26 @@ void ChopsEditor::analyseOutput (const std::vector<int>& playingSections)
     tunerReading.valid = true;
     snapButton.setEnabled (true);
     updateTunerText();
+}
+
+int ChopsEditor::tunerBarTicks() const
+{
+    const double bpm = chopsProcessor.hostBpm();
+    const double beats = chopsProcessor.hostTimeSigNumerator()
+                       * (4.0 / chopsProcessor.hostTimeSigDenominator());
+    const double seconds = bpm > 0.0 ? beats * 60.0 / bpm : 2.0;
+    return (int) std::ceil (seconds * kTunerTimerHz);
+}
+
+int ChopsEditor::tunerRollTicks() const
+{
+    return std::clamp (std::max ((int) (kTunerRollSeconds * kTunerTimerHz), tunerBarTicks()),
+                       1, kTunerRingMax);
+}
+
+int ChopsEditor::tunerHoldTicks() const
+{
+    return std::max ((int) (kTunerHoldSeconds * kTunerTimerHz), tunerBarTicks());
 }
 
 void ChopsEditor::clearTunerReading()

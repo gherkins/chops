@@ -27,6 +27,20 @@ void ChopsProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
     midiCollector.removeNextBlockOfMessages (midiMessages, buffer.getNumSamples());
+
+    if (auto* playHead = getPlayHead())
+    {
+        if (const auto pos = playHead->getPosition())
+        {
+            if (const auto hostBpm = pos->getBpm(); hostBpm && *hostBpm > 0.0)
+                bpm.store (*hostBpm, std::memory_order_relaxed);
+            if (const auto ts = pos->getTimeSignature(); ts && ts->numerator > 0 && ts->denominator > 0)
+            {
+                tsNum.store (ts->numerator, std::memory_order_relaxed);
+                tsDen.store (ts->denominator, std::memory_order_relaxed);
+            }
+        }
+    }
     chopsEngine.process (buffer, midiMessages);
 }
 

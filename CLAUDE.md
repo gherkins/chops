@@ -94,8 +94,11 @@ republishing.
   the message thread at 30 Hz over the engine's CLEAN voice mix (post-pitch,
   pre sr-reduce/drive: those never move the pitch, they only add off-grid
   aliases and intermodulation), gated to windows where only the reference
-  slice sounds, as a ~3 s rolling window; it clears after ~4 s without the
-  reference sounding (long enough to release a pad and click snap).
+  slice sounds, as a rolling window of at least 4 s and at least one bar at
+  the host tempo (processor publishes playhead BPM / time signature; 90 4/4
+  without a playhead). It clears after at least 6 s and at least one bar
+  without the reference sounding, so a single trigger stays readable for a
+  bar and there is time to release a pad and click snap.
   Polyphonic-safe: magnitude-weighted circular mean of every spectral
   peak's deviation from 12-TET; low confidence shows `--`.
 - **State** (`src/state/State.cpp`): flagship always-embed requirement. The
