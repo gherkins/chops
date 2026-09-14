@@ -378,4 +378,36 @@ bool setSectionGain (Document& doc, int index, float gain)
     return true;
 }
 
+// --- global edits ---
+
+bool setGlobalPitch (Document& doc, int semis, float cents)
+{
+    doc.global.pitchSemis = std::clamp (semis, -24, 24);
+    doc.global.fineCents = std::clamp (cents, -100.0f, 100.0f);
+    return true;
+}
+
+bool snapGlobalPitchToSemitone (Document& doc, int centsOff)
+{
+    if (centsOff == 0)
+        return false;
+
+    // Minimal change: shift fine only, and carry a whole semitone only when
+    // fine would leave the knob range, so a by-ear "pitch +1 / fine -96"
+    // is not silently rewritten into a different-looking pair.
+    int semis = doc.global.pitchSemis;
+    int fine = (int) std::lround (doc.global.fineCents) - centsOff;
+    if (fine > 100)
+    {
+        fine -= 100;
+        ++semis;
+    }
+    else if (fine < -100)
+    {
+        fine += 100;
+        --semis;
+    }
+    return setGlobalPitch (doc, semis, (float) fine);
+}
+
 } // namespace chops::edits

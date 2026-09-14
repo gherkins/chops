@@ -5,6 +5,7 @@
 #include "ui/PeakCache.h"
 #include "ui/SliceLane.h"
 #include "ui/WaveDisplay.h"
+#include "engine/GridTune.h"
 
 class ChopsEditor : public juce::AudioProcessorEditor,
                     public juce::FileDragAndDropTarget,
@@ -29,6 +30,9 @@ private:
     void applyEdit (const std::function<bool (chops::Document&)>& edit);
     void refreshFromModel();
     void selectSection (int sectionIndex);
+    void analyseOutput (const std::vector<int>& playingSections);
+    void resetTuner();
+    void updateTunerText();
 
     ChopsProcessor& chopsProcessor;
     std::shared_ptr<const chops::Document> doc;
@@ -49,6 +53,18 @@ private:
     juce::TextButton monoButton { "mono" };
     juce::TextButton velButton { "vel" };
     juce::Slider globalSr, globalDrive, globalPitch, globalFine, globalGain;
+
+    // Output tuner: grid offset of the most-played slice, latched until the
+    // sample or the reference slice changes.
+    juce::TextButton snapButton { "snap" };
+    std::vector<float> tunerWindow;
+    std::unique_ptr<chops::tune::Scratch> tunerScratch;
+    int tunerRefSection = -1;
+    float tuneRe = 0.0f, tuneIm = 0.0f;     // smoothed resultant on the 100-cent circle
+    int tuneCount = 0;
+    struct { int pitchClass = -1; float cents = 0.0f; bool valid = false; } tunerReading;
+    juce::String tunerText;
+    juce::Rectangle<int> tunerRect, infoRect;
 
     bool dragOver = false;
 

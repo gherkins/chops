@@ -214,6 +214,29 @@ ChopsEditor::ChopsEditor (ChopsProcessor& p)
         });
     };
 
+    // Output tuner: the readout latches the grid offset of the most-played
+    // slice; snap moves the global fine by exactly that amount. The engine
+    // re-resolves sustaining voices every block, so a held note re-pitches
+    // live and the readout re-converges to +0%.
+    addAndMakeVisible (snapButton);
+    snapButton.setEnabled (false);
+    tunerWindow.resize ((size_t) chops::tune::kWindow);
+    tunerScratch = std::make_unique<chops::tune::Scratch>();
+    snapButton.onClick = [this]
+    {
+        if (! tunerReading.valid)
+            return;
+
+        const int off = (int) std::lround (tunerReading.cents);
+        applyEdit ([off] (chops::Document& d)
+                   { return chops::edits::snapGlobalPitchToSemitone (d, off); });
+        tunerReading.cents -= (float) off;
+        tuneRe = tuneIm = 0.0f;
+        tuneCount = 0;
+        updateTunerText();
+    };
+    updateTunerText();
+
     refreshFromModel();
     chopsProcessor.addChangeListener (this);
     startTimerHz (30);
@@ -255,6 +278,7 @@ void ChopsEditor::refreshFromModel()
             peaks.build (doc->sample->buffer);
         else
             peaks.clear();
+        resetTuner();
     }
 
     waveDisplay.setDocument (doc, &peaks);
@@ -309,6 +333,7 @@ void ChopsEditor::timerCallback()
         }
     }
     waveDisplay.setPlayheads (playing);
+    analyseOutput (playingSections);
     padStrip.setActiveSections (std::move (playingSections));
 
     // Last-triggered slice becomes the edited one (also covers MIDI input).
@@ -333,6 +358,115 @@ void ChopsEditor::timerCallback()
         if (section == sliceLane.boundIndex())
             laneFrame = frame;
     sliceLane.setPlayhead (laneFrame >= 0.0, laneFrame);
+}
+
+void ChopsEditor::analyseOutput (const std::vector<int>& playingSections)
+{
+    if (doc == nullptr || doc->sample == nullptr)
+        return;
+
+    auto& engine = chopsProcessor.engine();
+
+    // Reference: the slice with the most playtime since the sample (or the
+    // slice layout) changed. A change of reference restarts the reading.
+    int ref = -1;
+    std::uint64_t most = 0;
+    const int count = std::min ((int) doc->sections.size(), chops::Engine::kMaxSections);
+    for (int i = 0; i < count; ++i)
+    {
+        const auto frames = engine.uiPlayFrames[(size_t) i].load (std::memory_order_relaxed);
+        if (frames > most)
+        {
+            most = frames;
+            ref = i;
+        }
+    }
+    if (ref != tunerRefSection)
+    {
+        resetTuner();
+        tunerRefSection = ref;
+        updateTunerText();
+    }
+
+    // Only windows where the reference slice is all that sounds count, so
+    // other slices never bleed into its reading. Otherwise the latch holds.
+    if (ref < 0 || playingSections.empty() || chopsProcessor.getSampleRate() <= 0.0)
+        return;
+    for (const int s : playingSections)
+        if (s != ref)
+            return;
+
+    engine.uiOutputTap.copyLatest (tunerWindow.data(), chops::tune::kWindow);
+
+    double energy = 0.0;
+    for (const float v : tunerWindow)
+        energy += (double) v * v;
+    if (std::sqrt (energy / (double) tunerWindow.size()) < 1.0e-3)   // < -60 dBFS
+        return;
+
+    const auto r = chops::tune::analyse (tunerWindow.data(), chops::tune::kWindow,
+                                         chopsProcessor.getSampleRate(), *tunerScratch);
+    if (r.numPeaks < 3)
+        return;
+
+    // Smooth the resultant vector across windows (a plain average of cents
+    // would break at the +-50 wrap), then decide on the smoothed length.
+    constexpr float alpha = 0.3f;
+    if (tuneCount == 0)
+    {
+        tuneRe = r.re;
+        tuneIm = r.im;
+    }
+    else
+    {
+        tuneRe += alpha * (r.re - tuneRe);
+        tuneIm += alpha * (r.im - tuneIm);
+    }
+    ++tuneCount;
+
+    const float confidence = std::sqrt (tuneRe * tuneRe + tuneIm * tuneIm);
+    if (confidence < 0.6f)
+        return;
+
+    tunerReading.pitchClass = r.pitchClass;
+    tunerReading.cents = (float) (100.0 * std::atan2 (tuneIm, tuneRe) / (2.0 * juce::MathConstants<double>::pi));
+    tunerReading.valid = true;
+    snapButton.setEnabled (true);
+    updateTunerText();
+}
+
+void ChopsEditor::resetTuner()
+{
+    tunerReading = {};
+    tunerRefSection = -1;
+    tuneRe = tuneIm = 0.0f;
+    tuneCount = 0;
+    snapButton.setEnabled (false);
+    updateTunerText();
+}
+
+void ChopsEditor::updateTunerText()
+{
+    juce::String text;
+    if (tunerReading.valid && doc != nullptr && tunerRefSection >= 0
+        && tunerRefSection < (int) doc->sections.size())
+    {
+        const int cents = (int) std::lround (tunerReading.cents);
+        text = juce::MidiMessage::getMidiNoteName (doc->sections[(size_t) tunerRefSection].midiNote,
+                                                   true, true, 3)
+             + "  " + juce::MidiMessage::getMidiNoteName (tunerReading.pitchClass, true, false, 3)
+             + " " + (cents >= 0 ? "+" : "") + juce::String (cents) + "%";
+    }
+    else
+    {
+        text = "--";
+    }
+
+    if (text != tunerText)
+    {
+        tunerText = text;
+        repaint (tunerRect);
+    }
 }
 
 void ChopsEditor::resized()
@@ -363,8 +497,13 @@ void ChopsEditor::resized()
         k->setBounds (knobArea.removeFromLeft (chops::ui::kKnobW));
 
     bounds.removeFromTop (8);
+    // Bottom info line: hint text left, tuner readout + snap right.
     auto info = bounds.removeFromBottom (22);
-    juce::ignoreUnused (info);
+    snapButton.setBounds (info.removeFromRight (52).withSizeKeepingCentre (52, 20));
+    info.removeFromRight (6);
+    tunerRect = info.removeFromRight (128);
+    info.removeFromRight (12);
+    infoRect = info;
 
     padStrip.setBounds (bounds.removeFromBottom (56));
     bounds.removeFromBottom (8);
@@ -393,8 +532,17 @@ void ChopsEditor::paint (juce::Graphics& g)
                         juce::Justification::centred);
     }
 
-    const auto info = getLocalBounds().reduced (12).removeFromBottom (22);
+    const auto info = infoRect;
     g.setFont (chops::ui::kFontLabel);
+
+    // Tuner readout: accent when the output sits on the grid.
+    {
+        const bool onGrid = tunerReading.valid && std::abs (tunerReading.cents) <= 2.0f;
+        g.setColour (! tunerReading.valid ? juce::Colours::whitesmoke.withAlpha (0.35f)
+                     : onGrid             ? juce::Colour (0xff5ec8a8)
+                                          : juce::Colours::whitesmoke.withAlpha (0.85f));
+        g.drawText (tunerText, tunerRect, juce::Justification::centredRight);
+    }
 
     if (doc != nullptr && doc->sample != nullptr)
     {

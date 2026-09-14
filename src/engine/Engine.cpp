@@ -11,6 +11,14 @@ void Engine::prepare (double sampleRate, int)
     for (auto& v : voices)
         v.reset();
     lastDoc = nullptr;
+    resetPlayFrames();
+    uiOutputTap.clear();
+}
+
+void Engine::resetPlayFrames() noexcept
+{
+    for (auto& f : uiPlayFrames)
+        f.store (0, std::memory_order_relaxed);
 }
 
 void Engine::publishDocument (std::unique_ptr<const Document> doc)
@@ -159,6 +167,16 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
             if (v.isActive() && v.sampleId() != currentId)
                 v.fastFade();
 
+        // A new sample or a structural edit (indices remapped) restarts the
+        // playtime tally; per-lane edits keep it.
+        const int sectionCount = doc != nullptr ? (int) doc->sections.size() : 0;
+        if (currentId != lastSampleId || sectionCount != lastSectionCount)
+        {
+            resetPlayFrames();
+            lastSampleId = currentId;
+            lastSectionCount = sectionCount;
+        }
+
         lastDoc = doc;
     }
 
@@ -202,7 +220,15 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
                                    std::memory_order_relaxed);
         uiVoices[i].frame.store (v.isActive() ? v.position() : -1.0,
                                  std::memory_order_relaxed);
+
+        if (v.isActive() && v.sectionIndex() >= 0 && v.sectionIndex() < kMaxSections)
+            uiPlayFrames[(size_t) v.sectionIndex()].fetch_add ((std::uint64_t) total,
+                                                               std::memory_order_relaxed);
     }
+
+    uiOutputTap.push (buffer.getReadPointer (0),
+                      buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr,
+                      total);
 
     swap.endBlock();
 }

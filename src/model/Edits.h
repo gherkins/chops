@@ -55,4 +55,13 @@ bool setSectionSrOverride (Document& doc, int index, double hz);       // 0 = fo
 bool setSectionDriveOverride (Document& doc, int index, float drive);  // < 0 = follow global
 bool setSectionGain (Document& doc, int index, float gain);            // 0..2, multiplies global
 
+// --- global edits ---
+
+bool setGlobalPitch (Document& doc, int semis, float cents);   // clamps +-24 / +-100
+
+// Tuner: move global fine by -centsOff (whole cents) so the measured output
+// lands on the nearest semitone; carries +-100 into pitchSemis only when
+// fine would leave the knob range. False (no publish) when centsOff == 0.
+bool snapGlobalPitchToSemitone (Document& doc, int centsOff);
+
 } // namespace chops::edits

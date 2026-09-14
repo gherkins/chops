@@ -5,12 +5,16 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 #include "../src/engine/Engine.h"
+#include "../src/engine/GridTune.h"
 #include "../src/model/Document.h"
 #include "../src/model/Edits.h"
 #include "../src/state/State.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <vector>
 
 static int failures = 0;
 
@@ -1019,6 +1023,242 @@ int main (int argc, char* argv[])
 
         EXPECT (block.getSample (0, 100) == 0.25f * 100.0f);
         EXPECT (block.getSample (0, 400) == 0.25f * 400.0f);
+    }
+
+    // --- grid tuner: offset of a spectrum from the 12-tone grid ---
+    // The one deliberate exception to bit-exact asserts: spectral peak
+    // interpolation is approximate, so these use cent tolerances.
+    {
+        using namespace chops::tune;
+        auto scratch = std::make_unique<Scratch>();
+
+        // Partials at hz with 2nd/3rd harmonics, detuned by cents.
+        const auto addTone = [] (std::vector<float>& buf, double hz, double cents, float amp)
+        {
+            const double f = hz * std::exp2 (cents / 1200.0);
+            for (size_t i = 0; i < buf.size(); ++i)
+            {
+                const double t = (double) i / kRate;
+                buf[i] += amp * (float) (std::sin (2.0 * juce::MathConstants<double>::pi * f * t)
+                                         + 0.5 * std::sin (2.0 * juce::MathConstants<double>::pi * 2.0 * f * t)
+                                         + 0.25 * std::sin (2.0 * juce::MathConstants<double>::pi * 3.0 * f * t));
+            }
+        };
+
+        std::vector<float> sine ((size_t) kWindow, 0.0f);
+        addTone (sine, 440.0, 0.0, 0.5f);
+        auto r = analyse (sine.data(), kWindow, kRate, *scratch);
+        EXPECT (r.numPeaks == 3);
+        EXPECT (std::abs (r.offsetCents) < 1.0f);
+        EXPECT (r.confidence > 0.9f);
+        EXPECT (r.pitchClass == 9);   // A
+
+        // A C major chord, every note 30 cents sharp: polyphony agrees on
+        // one offset, and the name is the bass note.
+        std::vector<float> chord ((size_t) kWindow, 0.0f);
+        addTone (chord, 130.8128, 30.0, 0.3f);   // C3
+        addTone (chord, 164.8138, 30.0, 0.3f);   // E3
+        addTone (chord, 195.9977, 30.0, 0.3f);   // G3
+        r = analyse (chord.data(), kWindow, kRate, *scratch);
+        EXPECT (r.numPeaks >= 6);
+        EXPECT (std::abs (r.offsetCents - 30.0f) < 2.0f);
+        EXPECT (r.confidence > 0.8f);
+        EXPECT (r.pitchClass == 0);   // C
+
+        // Wrap-safe near the +-50 boundary.
+        std::vector<float> flat ((size_t) kWindow, 0.0f);
+        addTone (flat, 130.8128, -45.0, 0.3f);
+        addTone (flat, 164.8138, -45.0, 0.3f);
+        addTone (flat, 195.9977, -45.0, 0.3f);
+        r = analyse (flat.data(), kWindow, kRate, *scratch);
+        EXPECT (std::abs (r.offsetCents + 45.0f) < 2.0f);
+        EXPECT (r.confidence > 0.8f);
+
+        // Silence and noise: nothing to snap to.
+        std::vector<float> silence ((size_t) kWindow, 0.0f);
+        r = analyse (silence.data(), kWindow, kRate, *scratch);
+        EXPECT (r.numPeaks == 0 && r.pitchClass == -1);
+
+        std::vector<float> noise ((size_t) kWindow);
+        std::uint32_t seed = 12345;
+        for (auto& v : noise)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            v = (float) (seed >> 8) / (float) (1u << 24) * 2.0f - 1.0f;
+        }
+        r = analyse (noise.data(), kWindow, kRate, *scratch);
+        EXPECT (r.numPeaks < 3 || r.confidence < 0.3f);
+
+        // Too short: no reading rather than a guess.
+        r = analyse (sine.data(), kWindow - 1, kRate, *scratch);
+        EXPECT (r.numPeaks == 0);
+    }
+
+    // --- snap global pitch to the nearest semitone ---
+    {
+        chops::Document d;
+        d.global.fineCents = 30.0f;
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d, 30));
+        EXPECT (d.global.fineCents == 0.0f && d.global.pitchSemis == 0);
+
+        EXPECT (! chops::edits::snapGlobalPitchToSemitone (d, 0));   // nothing to do
+        EXPECT (d.global.fineCents == 0.0f && d.global.pitchSemis == 0);
+
+        d.global.fineCents = 95.0f;
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d, -10));   // carries up
+        EXPECT (d.global.pitchSemis == 1 && d.global.fineCents == 5.0f);
+
+        d.global.pitchSemis = 0;
+        d.global.fineCents = -95.0f;
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d, 10));    // carries down
+        EXPECT (d.global.pitchSemis == -1 && d.global.fineCents == -5.0f);
+
+        d.global.pitchSemis = 0;
+        d.global.fineCents = 4.0f;
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d, 4));     // minimal change, no carry
+        EXPECT (d.global.pitchSemis == 0 && d.global.fineCents == 0.0f);
+
+        d.global.pitchSemis = 24;
+        d.global.fineCents = 100.0f;
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d, -10));   // clamped at the limits
+        EXPECT (d.global.pitchSemis <= 24 && d.global.fineCents <= 100.0f);
+
+        EXPECT (chops::edits::setGlobalPitch (d, 99, -999.0f));
+        EXPECT (d.global.pitchSemis == 24 && d.global.fineCents == -100.0f);
+    }
+
+    // --- playtime tally per section, reset on structural changes ---
+    {
+        auto ramp = std::make_shared<chops::SampleData>();
+        ramp->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+            ramp->buffer.setSample (0, i, (float) i);
+        ramp->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = ramp;
+        chops::edits::autoSliceEqual (d, 2);
+        d.global.mono = false;   // poly: no choke, so both slices sound at once
+        for (auto& s : d.sections)
+            s.mode = chops::PlayMode::Gate;
+
+        chops::Engine tally;
+        tally.prepare (kRate, 512);
+        tally.publishDocument (std::make_unique<const chops::Document> (d));
+
+        juce::AudioBuffer<float> block (1, 512);
+        const auto run = [&] (juce::MidiBuffer midi)
+        {
+            block.clear();
+            tally.process (block, midi);
+        };
+
+        juce::MidiBuffer on36;
+        addNoteOn (on36, 36, 0);
+        run (on36);
+        for (int i = 0; i < 3; ++i)
+            run ({});
+        juce::MidiBuffer on37;
+        addNoteOn (on37, 37, 0);
+        run (on37);
+        EXPECT (tally.uiPlayFrames[0].load() == 5 * 512);
+        EXPECT (tally.uiPlayFrames[1].load() == 512);
+
+        juce::MidiBuffer offs;
+        addNoteOff (offs, 36, 0);
+        addNoteOff (offs, 37, 0);
+        run (offs);   // 3 ms release finishes inside the block: not counted
+        EXPECT (tally.uiPlayFrames[0].load() == 5 * 512);
+        EXPECT (tally.uiPlayFrames[1].load() == 512);
+
+        // A per-lane edit keeps the tally, a structural edit restarts it.
+        chops::Document d2 (d);
+        EXPECT (chops::edits::setSectionGain (d2, 0, 0.5f));
+        tally.publishDocument (std::make_unique<const chops::Document> (d2));
+        run ({});
+        EXPECT (tally.uiPlayFrames[0].load() == 5 * 512);
+
+        chops::Document d3 (d2);
+        EXPECT (chops::edits::splitAt (d3, 11025));
+        tally.publishDocument (std::make_unique<const chops::Document> (d3));
+        run ({});
+        EXPECT (tally.uiPlayFrames[0].load() == 0);
+        EXPECT (tally.uiPlayFrames[1].load() == 0);
+    }
+
+    // --- end to end: a sharp chord through the engine, snapped back to the grid ---
+    {
+        using namespace chops::tune;
+        auto chordSample = std::make_shared<chops::SampleData>();
+        chordSample->buffer.setSize (1, kFrames);
+        for (int i = 0; i < kFrames; ++i)
+        {
+            const double t = (double) i / kRate;
+            float v = 0.0f;
+            for (const double f : { 130.8128, 164.8138, 195.9977 })
+                v += 0.2f * (float) (std::sin (2.0 * juce::MathConstants<double>::pi * f * t)
+                                     + 0.5 * std::sin (2.0 * juce::MathConstants<double>::pi * 2.0 * f * t));
+            chordSample->buffer.setSample (0, i, v);
+        }
+        chordSample->embeddedBlob.append ("x", 1);
+
+        chops::Document d;
+        d.sample = chordSample;
+        chops::edits::clearSlices (d);
+        d.sections[0].mode = chops::PlayMode::OneShot;
+        d.global.fineCents = 30.0f;
+
+        chops::Engine tuned;
+        tuned.prepare (kRate, 512);
+        tuned.publishDocument (std::make_unique<const chops::Document> (d));
+
+        std::vector<float> rendered;
+        juce::AudioBuffer<float> block (1, 512);
+        const auto renderBlocks = [&] (int count, juce::MidiBuffer midi)
+        {
+            for (int b = 0; b < count; ++b)
+            {
+                block.clear();
+                tuned.process (block, midi);
+                midi.clear();
+                rendered.insert (rendered.end(), block.getReadPointer (0),
+                                 block.getReadPointer (0) + 512);
+            }
+        };
+
+        juce::MidiBuffer noteOn;
+        addNoteOn (noteOn, 36, 0);
+        renderBlocks (20, noteOn);
+
+        // The tap holds exactly what left the engine (mono sum of one channel
+        // is that channel, bit for bit).
+        std::vector<float> window ((size_t) kWindow);
+        tuned.uiOutputTap.copyLatest (window.data(), kWindow);
+        bool tapExact = true;
+        for (int i = 0; i < kWindow; ++i)
+            tapExact = tapExact && window[(size_t) i] == rendered[rendered.size() - (size_t) kWindow + (size_t) i];
+        EXPECT (tapExact);
+
+        auto scratch = std::make_unique<Scratch>();
+        auto r = analyse (window.data(), kWindow, kRate, *scratch);
+        EXPECT (r.confidence > 0.8f);
+        EXPECT (std::abs (r.offsetCents - 30.0f) < 2.0f);
+        EXPECT (r.pitchClass == 0);
+
+        // Snap while the note is still running: the live FX refresh re-pitches
+        // the sounding voice and the output lands on the grid.
+        chops::Document d2 (d);
+        EXPECT (chops::edits::snapGlobalPitchToSemitone (d2, (int) std::lround (r.offsetCents)));
+        EXPECT (d2.global.fineCents == 0.0f && d2.global.pitchSemis == 0);
+        tuned.publishDocument (std::make_unique<const chops::Document> (d2));
+        renderBlocks (20, {});
+        EXPECT (tuned.uiPlayFrames[0].load() == 40 * 512);   // per-lane edit kept the tally
+
+        tuned.uiOutputTap.copyLatest (window.data(), kWindow);
+        r = analyse (window.data(), kWindow, kRate, *scratch);
+        EXPECT (r.confidence > 0.8f);
+        EXPECT (std::abs (r.offsetCents) < 2.0f);
+        EXPECT (r.pitchClass == 0);
     }
 
     wavFile.deleteFile();

@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "../model/Document.h"
+#include "OutputTap.h"
 #include "RealtimeSwap.h"
 #include "Voice.h"
 
@@ -44,7 +45,16 @@ public:
     };
     std::array<VoiceSnapshot, kMaxVoices> uiVoices;
 
+    // Tuner feedback. Frames each section has sounded since the sample (or
+    // the section layout) last changed: the editor tunes to the slice that
+    // gets the most playtime. Plus the final mixed output, for analysis.
+    static constexpr int kMaxSections = 128;
+    std::array<std::atomic<std::uint64_t>, kMaxSections> uiPlayFrames {};
+    OutputTap uiOutputTap;
+
 private:
+    void resetPlayFrames() noexcept;
+
     void handleMidi (const Document* doc, const juce::uint8* data, int numBytes) noexcept;
     void startSectionVoice (const Document& doc, int sectionIdx, int note, float velocity) noexcept;
     void renderSpan (juce::AudioBuffer<float>& buffer, int start, int numFrames) noexcept;
@@ -54,6 +64,8 @@ private:
     std::array<Voice, kMaxVoices> voices;
     double hostRate = 44100.0;
     const Document* lastDoc = nullptr;
+    const void* lastSampleId = nullptr;
+    int lastSectionCount = -1;
     std::uint64_t nextSerial = 1;
 };
 
