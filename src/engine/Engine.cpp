@@ -1,11 +1,12 @@
 #include "Engine.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace chops
 {
 
-void Engine::prepare (double sampleRate, int)
+void Engine::prepare (double sampleRate, int maxBlockSize)
 {
     hostRate = sampleRate;
     for (auto& v : voices)
@@ -13,6 +14,7 @@ void Engine::prepare (double sampleRate, int)
     lastDoc = nullptr;
     resetPlayFrames();
     uiOutputTap.clear();
+    cleanMix.assign ((size_t) std::max (0, maxBlockSize), 0.0f);
 }
 
 void Engine::resetPlayFrames() noexcept
@@ -147,9 +149,11 @@ void Engine::renderSpan (juce::AudioBuffer<float>& buffer, int start, int numFra
 
     float* outL = buffer.getWritePointer (0) + start;
     float* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) + start : nullptr;
+    float* clean = (size_t) (start + numFrames) <= cleanMix.size() ? cleanMix.data() + start
+                                                                    : nullptr;
 
     for (auto& v : voices)
-        v.render (outL, outR, numFrames);
+        v.render (outL, outR, numFrames, clean);
 }
 
 void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& midi) noexcept
@@ -200,6 +204,8 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
     }
 
     const int total = buffer.getNumSamples();
+    const int tapped = std::min (total, (int) cleanMix.size());
+    std::fill (cleanMix.begin(), cleanMix.begin() + tapped, 0.0f);
     int pos = 0;
 
     for (const auto metadata : midi)
@@ -226,9 +232,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, const juce::MidiBuffer& 
                                                                std::memory_order_relaxed);
     }
 
-    uiOutputTap.push (buffer.getReadPointer (0),
-                      buffer.getNumChannels() > 1 ? buffer.getReadPointer (1) : nullptr,
-                      total);
+    uiOutputTap.push (cleanMix.data(), nullptr, tapped);
 
     swap.endBlock();
 }

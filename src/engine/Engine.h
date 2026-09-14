@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <vector>
 
 #include "../model/Document.h"
 #include "OutputTap.h"
@@ -47,7 +48,9 @@ public:
 
     // Tuner feedback. Frames each section has sounded since the sample (or
     // the section layout) last changed: the editor tunes to the slice that
-    // gets the most playtime. Plus the final mixed output, for analysis.
+    // gets the most playtime. Plus the clean voice mix (post-pitch, before
+    // sr-reduce and drive) for analysis: the lo-fi stages never move the
+    // pitch, they only add off-grid aliases and intermodulation.
     static constexpr int kMaxSections = 128;
     std::array<std::atomic<std::uint64_t>, kMaxSections> uiPlayFrames {};
     OutputTap uiOutputTap;
@@ -62,6 +65,7 @@ private:
 
     RealtimeSwap<Document> swap;
     std::array<Voice, kMaxVoices> voices;
+    std::vector<float> cleanMix;     // sized in prepare; frames beyond it are not tapped
     double hostRate = 44100.0;
     const Document* lastDoc = nullptr;
     const void* lastSampleId = nullptr;

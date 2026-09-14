@@ -152,7 +152,7 @@ float Voice::readLooped (const float* channel, double pos, bool jumpFade) const 
     return value;
 }
 
-void Voice::render (float* outL, float* outR, int numFrames) noexcept
+void Voice::render (float* outL, float* outR, int numFrames, float* clean) noexcept
 {
     if (state == State::Idle || numFrames <= 0)
         return;
@@ -297,6 +297,9 @@ void Voice::render (float* outL, float* outR, int numFrames) noexcept
                               && dirSign == steadySign;
         float l = readLooped (srcL, phase, jumpFade);
         float r = stereoSrc ? readLooped (srcR, phase, jumpFade) : l;
+
+        if (clean != nullptr)
+            clean[i] += 0.5f * (l + r) * gain;
 
         if (decimIncrement > 0.0)
         {

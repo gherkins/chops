@@ -86,6 +86,16 @@ republishing.
   direction, and a note-off while travelling counter-main bounces once at the
   near boundary before running out. Sub-ms attack ramp
   declicks starts; Gate uses a ~3 ms release ramp.
+- **Tuner** (`src/engine/GridTune.h`, `OutputTap.h`): the editor shows the
+  grid offset of the most-played slice (`uiPlayFrames`, reset on sample load
+  and structural edits) as `<pad>  <note> <±cents>%` and `snap` shifts the
+  global fine by that amount (`edits::snapGlobalPitchToSemitone`, minimal
+  change, carries semitones only at the fine range edge). Analysis runs on
+  the message thread at 30 Hz over the engine's CLEAN voice mix (post-pitch,
+  pre sr-reduce/drive: those never move the pitch, they only add off-grid
+  aliases and intermodulation), gated to windows where only the reference
+  slice sounds. Polyphonic-safe: magnitude-weighted circular mean of every
+  spectral peak's deviation from 12-TET; low confidence shows `--`.
 - **State** (`src/state/State.cpp`): flagship always-embed requirement. The
   compressed blob is built ONCE at sample load (already-compressed sources
   embedded verbatim; PCM re-encoded to FLAC at ≤24 bit) and reused byte-for-

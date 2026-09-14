@@ -1259,6 +1259,47 @@ int main (int argc, char* argv[])
         EXPECT (r.confidence > 0.8f);
         EXPECT (std::abs (r.offsetCents) < 2.0f);
         EXPECT (r.pitchClass == 0);
+
+        // Lo-fi on: sr-reduce aliases and drive intermodulation would sit off
+        // the grid, so the tap carries the clean voice mix instead of the
+        // output and the reading survives. Same chord, still +30.
+        chops::Document lofi (d);
+        lofi.global.srReduce = 6000.0;
+        lofi.global.drive = 0.8f;
+
+        chops::Engine lofiEngine;
+        lofiEngine.prepare (kRate, 512);
+        lofiEngine.publishDocument (std::make_unique<const chops::Document> (lofi));
+
+        juce::AudioBuffer<float> lofiBlock (1, 512);
+        juce::MidiBuffer lofiOn;
+        addNoteOn (lofiOn, 36, 0);
+        std::vector<float> lofiOut;
+        for (int b = 0; b < 20; ++b)
+        {
+            lofiBlock.clear();
+            lofiEngine.process (lofiBlock, lofiOn);
+            lofiOn.clear();
+            lofiOut.insert (lofiOut.end(), lofiBlock.getReadPointer (0),
+                            lofiBlock.getReadPointer (0) + 512);
+        }
+
+        lofiEngine.uiOutputTap.copyLatest (window.data(), kWindow);
+        bool differs = false;
+        for (int i = 0; i < kWindow; ++i)
+            differs = differs || window[(size_t) i] != lofiOut[lofiOut.size() - (size_t) kWindow + (size_t) i];
+        EXPECT (differs);   // the tap is not the lo-fi output
+
+        r = analyse (window.data(), kWindow, kRate, *scratch);
+        EXPECT (r.confidence > 0.8f);
+        EXPECT (std::abs (r.offsetCents - 30.0f) < 2.0f);
+        EXPECT (r.pitchClass == 0);
+
+        // And the lo-fi output itself is a worse tuning source: lower
+        // confidence than the clean tap on the very same signal.
+        std::vector<float> outTail (lofiOut.end() - kWindow, lofiOut.end());
+        const auto rOut = analyse (outTail.data(), kWindow, kRate, *scratch);
+        EXPECT (rOut.confidence < r.confidence);
     }
 
     wavFile.deleteFile();

@@ -28,7 +28,11 @@ public:
     void updateLoop (std::int64_t loopStart, std::int64_t loopEnd,
                      int xfadeFrames, LoopDirection loopDir) noexcept;
 
-    void render (float* outL, float* outR, int numFrames) noexcept;
+    // clean (optional, mono, additive) receives the same signal before the
+    // decimator and waveshaper: post-pitch, post-gain, pre-lo-fi. The tuner
+    // reads it, since sr-reduce aliases and drive intermodulation sit off the
+    // 12-tone grid without moving the pitch.
+    void render (float* outL, float* outR, int numFrames, float* clean = nullptr) noexcept;
 
     bool isActive() const noexcept          { return state != State::Idle; }
     int note() const noexcept               { return midiNote_; }

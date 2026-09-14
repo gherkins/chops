@@ -1,6 +1,7 @@
 #pragma once
 
-// Wait-free capture of the engine's final output for the UI tuner. The audio
+// Wait-free capture of the engine's clean voice mix (post-pitch, pre-lo-fi)
+// for the UI tuner. The audio
 // thread mono-sums each block into a fixed ring of relaxed atomics; the
 // message thread copies the newest window out. The ring is twice the window,
 // so a torn read would need the audio thread to write a full window during
